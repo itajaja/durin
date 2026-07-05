@@ -240,11 +240,28 @@ th {
   color: var(--muted);
 }
 
+/* No overflow:hidden here — the inline row popovers must escape the table.
+   The corner rounding is done per corner cell instead. */
 .txn-table {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
-  overflow: hidden;
+}
+
+.txn-table thead th:first-child {
+  border-top-left-radius: 10px;
+}
+
+.txn-table thead th:last-child {
+  border-top-right-radius: 10px;
+}
+
+.txn-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: 10px;
+}
+
+.txn-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 10px;
 }
 
 .txn-table tbody tr:hover {
@@ -641,6 +658,11 @@ button.msel-opt {
   top: calc(100% + 2px);
   left: 0;
   white-space: normal;
+}
+
+.inline-pop-up {
+  top: auto;
+  bottom: calc(100% + 2px);
 }
 
 .inline-pop-title {

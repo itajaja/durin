@@ -1,4 +1,11 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { api, formatDate, formatMoney } from "../api";
 import DatePresets from "../components/DatePresets";
 import MultiSelect from "../components/MultiSelect";
@@ -804,8 +811,17 @@ function InlinePicker({
   includeUncategorized: boolean;
   onPick: (categoryId: number | null) => void;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [openUp, setOpenUp] = useState(false);
+  // Flip upward when the popover would poke below the viewport.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && el.getBoundingClientRect().bottom > window.innerHeight - 8) {
+      setOpenUp(true);
+    }
+  }, []);
   return (
-    <div className="msel-pop inline-pop">
+    <div ref={ref} className={`msel-pop inline-pop${openUp ? " inline-pop-up" : ""}`}>
       <div className="inline-pop-title">{title}</div>
       {includeUncategorized && (
         <button type="button" className="msel-opt" onClick={() => onPick(null)}>
