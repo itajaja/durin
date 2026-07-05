@@ -74,6 +74,7 @@ export interface SpendingSeries {
   color: string;
   values: number[];
   total: number;
+  avg_month: number;
 }
 
 export interface SpendingResponse {

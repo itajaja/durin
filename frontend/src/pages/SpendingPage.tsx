@@ -459,6 +459,7 @@ export default function SpendingPage() {
                 <tr>
                   <th>Category</th>
                   <th className="num">Spent</th>
+                  <th className="num">Avg / month</th>
                   <th className="num">Share</th>
                 </tr>
               </thead>
@@ -475,6 +476,7 @@ export default function SpendingPage() {
                         </span>
                       </td>
                       <td className="num nowrap">{formatMoney(s.total, currency)}</td>
+                      <td className="num nowrap">{formatMoney(s.avg_month, currency)}</td>
                       <td className="num nowrap muted">
                         {data.grand_total > 0
                           ? `${((s.total / data.grand_total) * 100).toFixed(1)}%`

@@ -776,12 +776,13 @@ def spending(
     if not cat_filter:
         return {"granularity": granularity, "buckets": buckets, "series": [], "grand_total": 0.0}
 
+    # Both signs: credits (refunds) offset a bucket's spending, clamped at
+    # zero below — a column can reach 0 but never goes negative.
     rows = (
         db.query(Transaction.posted, Transaction.amount, Transaction.category_id)
         .filter(
             Transaction.user_id == user.id,
             Transaction.deleted.is_(False),
-            Transaction.amount < 0,
             Transaction.posted >= start_ts,
             Transaction.posted <= end_ts,
             or_(*cat_filter),
@@ -797,21 +798,29 @@ def spending(
         if idx is None:
             continue  # posted timestamp lands outside the range edges
         series = sums.setdefault(category_id, [0.0] * len(buckets))
-        series[idx] += -amount
+        series[idx] += -amount  # debits positive, credits negative
+
+    # Average per month across the range; ranges shorter than a month show
+    # the plain total rather than extrapolating.
+    months_span = max(((end_date - start_date).days + 1) / 30.4375, 1.0)
 
     def _series_json(category_id: int | None) -> dict:
-        values = [round(v, 2) for v in sums.get(category_id, [0.0] * len(buckets))]
+        values = [
+            round(max(v, 0.0), 2) for v in sums.get(category_id, [0.0] * len(buckets))
+        ]
         if category_id is None:
             meta = {"name": "Uncategorized", "emoji": "", "color": UNCATEGORIZED_COLOR}
         else:
             c = spendable[category_id]
             meta = {"name": c.name, "emoji": c.emoji, "color": c.color}
+        total = round(sum(values), 2)
         return {
             "key": "none" if category_id is None else str(category_id),
             "category_id": category_id,
             **meta,
             "values": values,
-            "total": round(sum(values), 2),
+            "total": total,
+            "avg_month": round(total / months_span, 2),
         }
 
     series = [
