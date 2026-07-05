@@ -829,9 +829,11 @@ def spending(
     ]
     if include_uncategorized:
         series.append(_series_json(None))
+    grand_total = round(sum(s["total"] for s in series), 2)
     return {
         "granularity": granularity,
         "buckets": buckets,
         "series": series,
-        "grand_total": round(sum(s["total"] for s in series), 2),
+        "grand_total": grand_total,
+        "grand_avg_month": round(grand_total / months_span, 2),
     }

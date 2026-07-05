@@ -312,7 +312,8 @@ export default function SpendingPage() {
           <div className="chart-wrap card">
             <div className="summary muted">
               Total spent:{" "}
-              <strong className="neg">{formatMoney(data.grand_total, currency)}</strong>
+              <strong className="neg">{formatMoney(data.grand_total, currency)}</strong> · avg/month{" "}
+              <strong className="neg">{formatMoney(data.grand_avg_month, currency)}</strong>
             </div>
             <div className="chart-scroll">
               <div className="chart-inner">

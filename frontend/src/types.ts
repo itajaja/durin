@@ -82,6 +82,7 @@ export interface SpendingResponse {
   buckets: string[];
   series: SpendingSeries[];
   grand_total: number;
+  grand_avg_month: number;
 }
 
 export interface Txn {
