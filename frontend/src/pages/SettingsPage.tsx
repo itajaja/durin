@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, formatDateTime, formatMoney } from "../api";
+import { api, formatDateTime } from "../api";
+import Money from "../components/Money";
 import { Account, Connection } from "../types";
 
 export default function SettingsPage() {
@@ -234,11 +235,15 @@ export default function SettingsPage() {
                 <tr key={a.id}>
                   <td>{a.org_name || "—"}</td>
                   <td>{a.name}</td>
-                  <td className="num nowrap">{formatMoney(a.balance, a.currency)}</td>
                   <td className="num nowrap">
-                    {a.available_balance != null
-                      ? formatMoney(a.available_balance, a.currency)
-                      : "—"}
+                    <Money amount={a.balance} currency={a.currency} />
+                  </td>
+                  <td className="num nowrap">
+                    {a.available_balance != null ? (
+                      <Money amount={a.available_balance} currency={a.currency} />
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="nowrap">{formatDateTime(a.balance_date)}</td>
                 </tr>

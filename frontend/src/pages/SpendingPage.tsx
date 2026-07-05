@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, formatMoney } from "../api";
+import { api } from "../api";
+import { useMoney } from "../components/Money";
 import DatePresets from "../components/DatePresets";
 import {
   Account,
@@ -27,19 +28,6 @@ function defaultRange(): { start: string; end: string } {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   return { start: isoDate(start), end: isoDate(now) };
-}
-
-function compactMoney(v: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      notation: "compact",
-      maximumFractionDigits: 1,
-    }).format(v);
-  } catch {
-    return v.toFixed(0);
-  }
 }
 
 function niceCeil(v: number): number {
@@ -73,6 +61,7 @@ interface PickerEntry {
 }
 
 export default function SpendingPage() {
+  const { fmt, fmtCompact } = useMoney();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlInit = useRef({
     from: searchParams.get("from"),
@@ -327,7 +316,7 @@ export default function SpendingPage() {
             </span>
             {seriesTotals.has(entry.key) && (
               <span className="muted small">
-                {formatMoney(seriesTotals.get(entry.key)!, currency)}
+                {fmt(seriesTotals.get(entry.key)!, currency)}
               </span>
             )}
           </label>
@@ -351,8 +340,8 @@ export default function SpendingPage() {
           <div className="chart-wrap card">
             <div className="summary muted">
               Total spent:{" "}
-              <strong className="neg">{formatMoney(data.grand_total, currency)}</strong> · avg/month{" "}
-              <strong className="neg">{formatMoney(data.grand_avg_month, currency)}</strong>
+              <strong className="neg">{fmt(data.grand_total, currency)}</strong> · avg/month{" "}
+              <strong className="neg">{fmt(data.grand_avg_month, currency)}</strong>
             </div>
             <div className="chart-scroll">
               <div className="chart-inner">
@@ -373,7 +362,7 @@ export default function SpendingPage() {
                       className="grid-line"
                     />
                     <text x={MARGIN.left - 8} y={y(t) + 4} className="axis-label" textAnchor="end">
-                      {compactMoney(t, currency)}
+                      {fmtCompact(t, currency)}
                     </text>
                   </g>
                 ))}
@@ -503,14 +492,14 @@ export default function SpendingPage() {
                           {s.name}
                         </span>
                         <span className="tt-val">
-                          {formatMoney(s.values[hovered], currency)}
+                          {fmt(s.values[hovered], currency)}
                         </span>
                       </div>
                     ))}
                   <div className="tt-row tt-total">
                     <span className="tt-name">Total</span>
                     <span className="tt-val">
-                      {formatMoney(bucketTotals[hovered], currency)}
+                      {fmt(bucketTotals[hovered], currency)}
                     </span>
                   </div>
                 </div>
@@ -542,8 +531,8 @@ export default function SpendingPage() {
                           {s.name}
                         </span>
                       </td>
-                      <td className="num nowrap">{formatMoney(s.total, currency)}</td>
-                      <td className="num nowrap">{formatMoney(s.avg_month, currency)}</td>
+                      <td className="num nowrap">{fmt(s.total, currency)}</td>
+                      <td className="num nowrap">{fmt(s.avg_month, currency)}</td>
                       <td className="num nowrap muted">
                         {data.grand_total > 0
                           ? `${((s.total / data.grand_total) * 100).toFixed(1)}%`

@@ -38,6 +38,19 @@ export function formatMoney(amount: string | number, currency: string): string {
   }
 }
 
+export function compactMoney(v: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(v);
+  } catch {
+    return v.toFixed(0);
+  }
+}
+
 export function formatDate(ts: number | null): string {
   if (!ts) return "—";
   return new Date(ts * 1000).toLocaleDateString();

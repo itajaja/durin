@@ -7,8 +7,9 @@ import {
   useState,
 } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, formatDate, formatMoney } from "../api";
+import { api, formatDate } from "../api";
 import DatePresets from "../components/DatePresets";
+import Money, { useMoney } from "../components/Money";
 import MultiSelect from "../components/MultiSelect";
 import {
   Account,
@@ -81,6 +82,7 @@ export default function TransactionsPage() {
   const [picker, setPicker] = useState<
     { kind: "chip" | "payee"; txnId: number; payee?: string } | null
   >(null);
+  const { maskText } = useMoney();
 
   const alive = useRef(true);
   const fetchSeq = useRef(0);
@@ -623,10 +625,16 @@ export default function TransactionsPage() {
         <div className="summary muted">
           {summary.total} transaction{summary.total === 1 ? "" : "s"}
           {hasFilters ? " (filtered)" : ""} · spent{" "}
-          <strong className="neg">{formatMoney(summary.spend, summaryCurrency)}</strong> · income{" "}
-          <strong className="pos">{formatMoney(summary.income, summaryCurrency)}</strong> · net{" "}
+          <strong className="neg">
+            <Money amount={summary.spend} currency={summaryCurrency} />
+          </strong>{" "}
+          · income{" "}
+          <strong className="pos">
+            <Money amount={summary.income} currency={summaryCurrency} />
+          </strong>{" "}
+          · net{" "}
           <strong className={summary.net < 0 ? "neg" : "pos"}>
-            {formatMoney(summary.net, summaryCurrency)}
+            <Money amount={summary.net} currency={summaryCurrency} />
           </strong>
         </div>
       )}
@@ -747,14 +755,14 @@ export default function TransactionsPage() {
                     {t.org_name && <span className="muted small"> · {t.org_name}</span>}
                   </td>
                   <td>
-                    {t.description || t.payee || "(no description)"}
+                    {maskText(t.description || t.payee || "(no description)")}
                     {t.pending && <span className="badge">pending</span>}
                     {t.edited && <span className="badge">edited</span>}
                     {(t.payee || t.memo) && (
                       <div className="muted small">
                         {t.payee && (
                           <span className="payee-wrap">
-                            {t.payee}
+                            {maskText(t.payee)}
                             <button
                               type="button"
                               className="payee-tag-btn"
@@ -779,7 +787,7 @@ export default function TransactionsPage() {
                           </span>
                         )}
                         {t.payee && t.memo ? " · " : ""}
-                        {t.memo}
+                        {maskText(t.memo)}
                       </div>
                     )}
                   </td>
@@ -817,7 +825,7 @@ export default function TransactionsPage() {
                     )}
                   </td>
                   <td className={`num nowrap ${t.amount < 0 ? "neg" : "pos"}`}>
-                    {formatMoney(t.amount_str, t.currency)}
+                    <Money amount={t.amount_str} currency={t.currency} />
                   </td>
                   <td className="edit-col">
                     <button
@@ -982,7 +990,7 @@ function EditRow({
           {error && <div className="alert alert-error">{error}</div>}
           <div className="edit-actions">
             <span className="muted small">
-              {formatDate(txn.posted)} · {formatMoney(txn.amount_str, txn.currency)}
+              {formatDate(txn.posted)} · <Money amount={txn.amount_str} currency={txn.currency} />
             </span>
             <div className="spacer" />
             <button type="button" className="btn btn-danger" disabled={busy} onClick={remove}>

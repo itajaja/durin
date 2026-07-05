@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, NavLink, Route, Routes } from "react-router-dom";
 import { api, ApiError } from "./api";
+import { DemoModeContext } from "./components/Money";
 import { Connection, REFRESHED_EVENT, SyncStatus, User } from "./types";
 import LoginPage from "./pages/LoginPage";
 import TransactionsPage from "./pages/TransactionsPage";
@@ -20,10 +21,36 @@ export default function App() {
   // undefined = still checking the session; null = not signed in.
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [demo, setDemo] = useState(() => localStorage.getItem("durin-demo") === "1");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState("");
   const alive = useRef(true);
   const pollTimer = useRef<number | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem("durin-demo", demo ? "1" : "0");
+  }, [demo]);
+
+  // Close the user menu on outside click / Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     alive.current = true;
@@ -130,6 +157,7 @@ export default function App() {
   }
 
   return (
+    <DemoModeContext.Provider value={demo}>
     <BrowserRouter>
       <header className="topbar">
         <Link to="/" className="brand">
@@ -147,16 +175,44 @@ export default function App() {
         <button className="btn btn-primary" onClick={forceRefresh} disabled={syncing}>
           {syncing ? "Syncing…" : "Refresh"}
         </button>
-        <button
-          className="btn btn-quiet theme-toggle"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-        >
-          {theme === "dark" ? "☀" : "☾"}
-        </button>
-        <span className="user-email" title={user.name}>
-          {user.email}
-        </span>
+        <div className="user-menu" ref={menuRef}>
+          <button
+            className="btn btn-quiet user-menu-btn"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            title={user.name}
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {demo && <span className="demo-badge">DEMO</span>}
+            <span className="user-email">{user.email}</span>
+            <span className="msel-caret">▾</span>
+          </button>
+          {menuOpen && (
+            <div className="msel-pop user-menu-pop" role="menu">
+              <button
+                type="button"
+                className="msel-opt"
+                role="menuitem"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              >
+                <span className="menu-icon">{theme === "dark" ? "☀" : "☾"}</span>
+                <span className="msel-opt-label">
+                  Switch to {theme === "dark" ? "light" : "dark"} theme
+                </span>
+              </button>
+              <button
+                type="button"
+                className="msel-opt"
+                role="menuitemcheckbox"
+                aria-checked={demo}
+                onClick={() => setDemo(!demo)}
+              >
+                <input type="checkbox" checked={demo} readOnly tabIndex={-1} />
+                <span className="msel-opt-label">Demo mode (mask amounts)</span>
+              </button>
+            </div>
+          )}
+        </div>
         <button className="btn btn-quiet" onClick={logout}>
           Sign out
         </button>
@@ -172,5 +228,6 @@ export default function App() {
         </Routes>
       </main>
     </BrowserRouter>
+    </DemoModeContext.Provider>
   );
 }

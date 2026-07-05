@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, formatDate, formatMoney } from "../api";
+import { api, formatDate } from "../api";
+import Money, { useMoney } from "../components/Money";
 import {
   CATEGORY_COLORS,
   CategoriesResponse,
@@ -280,6 +281,7 @@ function CategoryCard({
   const [newSub, setNewSub] = useState("");
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const previewSeq = useRef(0);
+  const { maskText } = useMoney();
 
   // Live preview: which uncategorized transactions would this substring
   // actually file HERE? (Server-side it respects older rules' priority.)
@@ -520,9 +522,10 @@ function CategoryCard({
               <ul className="preview-list">
                 {preview.sample.slice(0, 5).map((t) => (
                   <li key={t.id}>
-                    <span className="muted">{formatDate(t.posted)}</span> {t.description}{" "}
+                    <span className="muted">{formatDate(t.posted)}</span>{" "}
+                    {maskText(t.description)}{" "}
                     <span className={Number(t.amount_str) < 0 ? "neg" : "pos"}>
-                      {formatMoney(t.amount_str, t.currency)}
+                      <Money amount={t.amount_str} currency={t.currency} />
                     </span>
                   </li>
                 ))}
