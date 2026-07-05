@@ -132,6 +132,33 @@ class Account(Base):
     )
 
 
+class BalanceSnapshot(Base):
+    """One balance reading per account per (local) day, recorded on every
+    sync. SimpleFin only reports the *current* balance — there is no
+    historical-balance API — so this history accumulates from the first
+    sync after the table exists and cannot be backfilled. A same-day
+    re-sync overwrites: each day keeps its latest reading."""
+
+    __tablename__ = "balance_snapshots"
+    __table_args__ = (
+        UniqueConstraint("account_id", "day"),
+        Index("ix_balance_snapshots_user_day", "user_id", "day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id", ondelete="CASCADE"), index=True
+    )
+    day: Mapped[str] = mapped_column(String)  # YYYY-MM-DD, server-local time
+    # Exact decimal string as SimpleFin sent it (same convention as
+    # Account.balance); converted to float only for the JSON the chart eats.
+    balance: Mapped[str] = mapped_column(String)
+    recorded_at: Mapped[int] = mapped_column(Integer, default=now_ts)
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
     __table_args__ = (

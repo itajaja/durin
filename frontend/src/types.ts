@@ -86,6 +86,25 @@ export interface SpendingResponse {
   grand_avg_month: number;
 }
 
+export interface AssetPoint {
+  day: string; // YYYY-MM-DD
+  balance: number;
+}
+
+export interface AssetAccount {
+  id: number;
+  name: string;
+  org_name: string;
+  currency: string;
+  balance: string;
+  balance_date: number | null;
+  points: AssetPoint[];
+}
+
+export interface AssetsResponse {
+  accounts: AssetAccount[];
+}
+
 export interface Txn {
   id: number;
   account_id: number;

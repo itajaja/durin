@@ -6,6 +6,7 @@ import { Connection, REFRESHED_EVENT, SyncStatus, User } from "./types";
 import LoginPage from "./pages/LoginPage";
 import TransactionsPage from "./pages/TransactionsPage";
 import SpendingPage from "./pages/SpendingPage";
+import AssetsPage from "./pages/AssetsPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import SettingsPage from "./pages/SettingsPage";
 
@@ -170,6 +171,7 @@ export default function App() {
             Transactions
           </NavLink>
           <NavLink to="/spending">Spending</NavLink>
+          <NavLink to="/assets">Assets</NavLink>
           <NavLink to="/categories">Categories</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
@@ -224,6 +226,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<TransactionsPage />} />
           <Route path="/spending" element={<SpendingPage />} />
+          <Route path="/assets" element={<AssetsPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<TransactionsPage />} />

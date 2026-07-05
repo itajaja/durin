@@ -10,8 +10,8 @@ stores them in SQLite, and shows them in a filterable, sortable table.
   infinite-scrolling transactions table with filters (account, category, date
   range with quick presets, text search), sorting, spend/income/net summary,
   inline editing, and batch actions; a Spending page with a stacked-bar chart
-  by category (day/week/month/year); a Categories page; and a settings page
-  for SimpleFin connections.
+  by category (day/week/month/year); an Assets page charting account balances
+  over time; a Categories page; and a settings page for SimpleFin connections.
 - **Categories:** per-user budget categories with substring matching rules,
   managed on the Categories page. See below.
 - **Auth:** Google sign-in with an email allowlist; multiple users each see
@@ -81,6 +81,21 @@ The **Spending** page plots expenses (negative amounts, shown as positive) as
 a stacked bar chart: pick the categories, a date range (with quick presets),
 and a grouping (day / week / month / year). "Not spending" categories never
 count there.
+
+## The Assets page
+
+Every sync records one balance snapshot per account per day in the
+`balance_snapshots` table (the day comes from the bank's balance-date stamp;
+a same-day re-sync overwrites, so each day keeps its latest reading). The
+Assets page plots those snapshots — a line per account plus a Total, with
+values carried forward between readings — and lists every account's current
+balance underneath.
+
+SimpleFin only reports an account's *current* balance, so history starts
+accumulating from the first sync after this table ships and **cannot be
+backfilled**. (Reconstructing balances backwards from transactions would
+break on investment accounts — market moves aren't transactions — so Durin
+doesn't guess.)
 
 ## Importing historical transactions
 

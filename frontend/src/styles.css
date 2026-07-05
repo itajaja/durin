@@ -794,6 +794,29 @@ button.msel-opt {
   transition: opacity 0.12s ease;
 }
 
+/* ---- assets chart ---- */
+.crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.total-line {
+  stroke: var(--fg);
+}
+
+/* Hovered-day markers get a surface ring so overlapping lines stay legible. */
+.point-ring {
+  stroke: var(--card);
+  stroke-width: 2;
+}
+
+.total-row td {
+  border-top: 2px solid var(--border);
+  border-bottom: none;
+  font-weight: 600;
+}
+
 .tt-row {
   display: flex;
   align-items: center;

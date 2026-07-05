@@ -11,6 +11,7 @@ import logging
 import re
 import threading
 import time
+from datetime import datetime
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -18,7 +19,14 @@ from sqlalchemy.orm import Session
 from . import categorize
 from .config import settings
 from .db import SessionLocal
-from .models import Account, Connection, SyncLog, Transaction, now_ts
+from .models import (
+    Account,
+    BalanceSnapshot,
+    Connection,
+    SyncLog,
+    Transaction,
+    now_ts,
+)
 from .simplefin import SimpleFinError, fetch_accounts
 
 log = logging.getLogger("durin.sync")
@@ -136,7 +144,35 @@ def _upsert_account(db: Session, conn: Connection, payload: dict) -> tuple[Accou
         except (TypeError, ValueError):
             pass
     db.flush()
+    _record_balance_snapshot(db, account)
     return account, created
+
+
+def _record_balance_snapshot(db: Session, account: Account) -> None:
+    """Upsert today's balance reading for the Assets page. The day comes
+    from the bank's balance-date stamp (falling back to now), so a stale
+    stamp lands on the day it was actually accurate for."""
+    ts = account.balance_date or now_ts()
+    day = datetime.fromtimestamp(ts).date().isoformat()
+    row = (
+        db.query(BalanceSnapshot)
+        .filter(
+            BalanceSnapshot.account_id == account.id, BalanceSnapshot.day == day
+        )
+        .one_or_none()
+    )
+    if row is None:
+        db.add(
+            BalanceSnapshot(
+                user_id=account.user_id,
+                account_id=account.id,
+                day=day,
+                balance=account.balance,
+            )
+        )
+    elif row.balance != account.balance:
+        row.balance = account.balance
+        row.recorded_at = now_ts()
 
 
 def _upsert_transactions(

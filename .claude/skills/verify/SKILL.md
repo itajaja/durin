@@ -49,8 +49,10 @@ curl -s -b /tmp/ck.txt 'localhost:8400/api/transactions?page_size=3'
 Key flows worth driving after changes: login → transactions table
 (filters/sort/pagination), Settings → add connection via the FORM (not just
 the API), Sync now, Delete, "Refresh from banks" on the Transactions page,
-category filter + chips, and the Spending page (picker toggles, hover
-tooltip, granularity/date changes).
+category filter + chips, the Spending page (picker toggles, hover
+tooltip, granularity/date changes), and the Assets page (balance history
+lines from `GET /api/assets`; snapshots are written by each sync, so force
+a sync first on a fresh database).
 
 Categories: per-user, managed via API/UI (no script). Demo-data substrings
 that match: "grocer", "fishin", "pay day". Key endpoints: POST

@@ -12,6 +12,7 @@ from .db import get_db
 from .auth import get_current_user
 from .models import (
     Account,
+    BalanceSnapshot,
     Category,
     CategoryRule,
     Connection,
@@ -198,6 +199,97 @@ def list_accounts(user: User = Depends(get_current_user), db: Session = Depends(
         }
         for a in accounts
     ]
+
+
+@router.get("/assets")
+def assets(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    start: str = Query(default=""),
+    end: str = Query(default=""),
+    accounts: str = Query(default=""),  # comma-separated account ids; empty = all
+):
+    """Per-account balance history for the Assets page. Snapshots are sparse
+    (one per day an account synced); the frontend forward-fills between
+    them. Every account is returned even with zero points in range, so the
+    picker and the current-balances table always have the full list."""
+    account_ids: list[int] = []
+    if accounts.strip():
+        try:
+            account_ids = [int(p) for p in accounts.split(",") if p.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="accounts must be a list of ids")
+    # Validate format; days are ISO strings so range filters compare lexically.
+    if start:
+        _parse_iso_date(start)
+    if end:
+        _parse_iso_date(end)
+
+    q = db.query(BalanceSnapshot).filter(BalanceSnapshot.user_id == user.id)
+    if account_ids:
+        q = q.filter(BalanceSnapshot.account_id.in_(account_ids))
+    if start:
+        q = q.filter(BalanceSnapshot.day >= start)
+    if end:
+        q = q.filter(BalanceSnapshot.day <= end)
+
+    def _value(raw: str) -> float:
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+
+    points: dict[int, list[dict]] = {}
+    if start:
+        # Seed each account with its latest reading from before the range,
+        # clamped to the start day, so a window opened mid-history still
+        # carries the balance in from the left edge.
+        latest = (
+            db.query(
+                BalanceSnapshot.account_id,
+                func.max(BalanceSnapshot.day).label("day"),
+            )
+            .filter(BalanceSnapshot.user_id == user.id, BalanceSnapshot.day < start)
+            .group_by(BalanceSnapshot.account_id)
+            .subquery()
+        )
+        seed_q = db.query(BalanceSnapshot).join(
+            latest,
+            (BalanceSnapshot.account_id == latest.c.account_id)
+            & (BalanceSnapshot.day == latest.c.day),
+        )
+        if account_ids:
+            seed_q = seed_q.filter(BalanceSnapshot.account_id.in_(account_ids))
+        for snap in seed_q:
+            points[snap.account_id] = [{"day": start, "balance": _value(snap.balance)}]
+
+    for snap in q.order_by(BalanceSnapshot.day):
+        acct_points = points.setdefault(snap.account_id, [])
+        if acct_points and acct_points[-1]["day"] == snap.day:
+            acct_points[-1]["balance"] = _value(snap.balance)
+            continue
+        acct_points.append({"day": snap.day, "balance": _value(snap.balance)})
+
+    accts = (
+        db.query(Account)
+        .filter(Account.user_id == user.id)
+        .order_by(Account.org_name, Account.name)
+        .all()
+    )
+    return {
+        "accounts": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "org_name": a.org_name,
+                "currency": a.currency,
+                "balance": a.balance,
+                "balance_date": a.balance_date,
+                "points": points.get(a.id, []),
+            }
+            for a in accts
+        ]
+    }
 
 
 def _category_json(c: Category, txn_count: int) -> dict:
