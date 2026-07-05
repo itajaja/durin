@@ -524,8 +524,19 @@ def list_transactions(
             )
         )
 
-    total, total_amount, total_spend, total_income = query.with_entities(
-        func.count(),
+    total = query.with_entities(func.count()).scalar() or 0
+
+    # The money summary ignores not-spending categories (transfers, card
+    # payments…) — unless the category filter explicitly selects them, in
+    # which case the user is asking about exactly those rows.
+    money_query = query
+    if not categories.strip():
+        money_query = query.outerjoin(
+            Category, Transaction.category_id == Category.id
+        ).filter(
+            or_(Transaction.category_id.is_(None), Category.is_transaction.is_(False))
+        )
+    total_amount, total_spend, total_income = money_query.with_entities(
         func.coalesce(func.sum(Transaction.amount), 0.0),
         func.coalesce(
             func.sum(case((Transaction.amount < 0, -Transaction.amount), else_=0.0)), 0.0
