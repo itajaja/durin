@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api, formatDate, formatMoney } from "../api";
 import DatePresets from "../components/DatePresets";
+import MultiSelect from "../components/MultiSelect";
 import {
   Account,
   CategoriesResponse,
@@ -18,8 +19,9 @@ const PAGE_SIZE = 50;
 export default function TransactionsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [accountId, setAccountId] = useState<string>("");
-  const [categoryId, setCategoryId] = useState<string>(""); // "", "none", or id
+  // Empty set = no filter (all). Category keys are ids plus "none".
+  const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
+  const [categoryKeys, setCategoryKeys] = useState<Set<string>>(new Set());
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [q, setQ] = useState("");
@@ -69,18 +71,19 @@ export default function TransactionsPage() {
     return () => window.clearTimeout(t);
   }, [q]);
 
-  // If the filtered category was removed, drop the filter instead of leaving
-  // a blank select silently matching nothing.
+  // If a filtered category was removed, drop it from the filter instead of
+  // silently matching nothing.
   useEffect(() => {
-    if (
-      categoryId &&
-      categoryId !== "none" &&
-      categories.length > 0 &&
-      !categories.some((c) => String(c.id) === categoryId)
-    ) {
-      setCategoryId("");
-    }
-  }, [categories, categoryId]);
+    if (categories.length === 0) return;
+    const valid = new Set(["none", ...categories.map((c) => String(c.id))]);
+    setCategoryKeys((prev) => {
+      const kept = [...prev].filter((k) => valid.has(k));
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }, [categories]);
+
+  const accountsKey = [...accountIds].sort().join(",");
+  const categoriesKey = [...categoryKeys].sort().join(",");
 
   const loadMeta = useCallback(async () => {
     try {
@@ -105,14 +108,14 @@ export default function TransactionsPage() {
         page: String(page),
         page_size: String(PAGE_SIZE),
       });
-      if (accountId) params.set("account_id", accountId);
-      if (categoryId) params.set("category", categoryId);
+      if (accountsKey) params.set("accounts", accountsKey);
+      if (categoriesKey) params.set("categories", categoriesKey);
       if (start) params.set("start", start);
       if (end) params.set("end", end);
       if (debouncedQ) params.set("q", debouncedQ);
       return params;
     },
-    [accountId, categoryId, start, end, debouncedQ, sort, dir]
+    [accountsKey, categoriesKey, start, end, debouncedQ, sort, dir]
   );
 
   const loadFresh = useCallback(async () => {
@@ -227,22 +230,26 @@ export default function TransactionsPage() {
     sort === field ? (dir === "asc" ? " ▲" : " ▼") : "";
 
   const clearFilters = () => {
-    setAccountId("");
-    setCategoryId("");
+    setAccountIds(new Set());
+    setCategoryKeys(new Set());
     setStart("");
     setEnd("");
     setQ("");
   };
 
-  const hasFilters = accountId || categoryId || start || end || q;
+  const hasFilters =
+    accountIds.size > 0 || categoryKeys.size > 0 || Boolean(start || end || q);
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
 
-  // Summary currency: the filtered account's, else the common one, else USD.
-  const filteredAccount = accounts.find((a) => String(a.id) === accountId);
-  const uniqueCurrencies = new Set(accounts.map((a) => a.currency));
+  // Summary currency: the one shared by the accounts in view (the selected
+  // subset when the account filter is active), else USD.
+  const accountsInView =
+    accountIds.size > 0 ? accounts.filter((a) => accountIds.has(String(a.id))) : accounts;
+  const viewCurrencies = new Set(accountsInView.map((a) => a.currency));
   const summaryCurrency =
-    filteredAccount?.currency ??
-    (uniqueCurrencies.size === 1 && accounts.length > 0 ? accounts[0].currency : "USD");
+    viewCurrencies.size === 1 && accountsInView.length > 0
+      ? accountsInView[0].currency
+      : "USD";
 
   const toggleSelected = (id: number) => {
     setSelected((prev) => {
@@ -333,29 +340,30 @@ export default function TransactionsPage() {
       </div>
 
       <div className="filters">
-        <label>
-          Account
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-            <option value="">All accounts</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={String(a.id)}>
-                {a.org_name ? `${a.org_name} — ${a.name}` : a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Category
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">All categories</option>
-            <option value="none">Uncategorized</option>
-            {categories.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.emoji ? `${c.emoji} ${c.name}` : c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <MultiSelect
+          label="Accounts"
+          allLabel="All accounts"
+          options={accounts.map((a) => ({
+            value: String(a.id),
+            label: a.org_name ? `${a.org_name} — ${a.name}` : a.name,
+          }))}
+          selected={accountIds}
+          onChange={setAccountIds}
+        />
+        <MultiSelect
+          label="Categories"
+          allLabel="All categories"
+          options={[
+            { value: "none", label: "Uncategorized", color: "#9b998e" },
+            ...categories.map((c) => ({
+              value: String(c.id),
+              label: c.emoji ? `${c.emoji} ${c.name}` : c.name,
+              color: c.color,
+            })),
+          ]}
+          selected={categoryKeys}
+          onChange={setCategoryKeys}
+        />
         <label>
           From
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />

@@ -462,8 +462,8 @@ def _parse_date(value: str, end_of_day: bool) -> int:
 def list_transactions(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    account_id: int | None = Query(default=None),
-    category: str = Query(default=""),  # "", "none", or a category id
+    accounts: str = Query(default=""),  # comma-separated account ids; empty = all
+    categories: str = Query(default=""),  # comma-separated category ids and/or "none"
     start: str = Query(default=""),
     end: str = Query(default=""),
     q: str = Query(default=""),
@@ -475,15 +475,35 @@ def list_transactions(
     query = db.query(Transaction).filter(
         Transaction.user_id == user.id, Transaction.deleted.is_(False)
     )
-    if account_id is not None:
-        query = query.filter(Transaction.account_id == account_id)
-    if category == "none":
-        query = query.filter(Transaction.category_id.is_(None))
-    elif category:
+    if accounts.strip():
         try:
-            query = query.filter(Transaction.category_id == int(category))
+            account_ids = [int(p) for p in accounts.split(",") if p.strip()]
         except ValueError:
-            raise HTTPException(status_code=400, detail="category must be an id or 'none'")
+            raise HTTPException(status_code=400, detail="accounts must be a list of ids")
+        query = query.filter(Transaction.account_id.in_(account_ids))
+    if categories.strip():
+        include_none = False
+        cat_ids: list[int] = []
+        for part in categories.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if part == "none":
+                include_none = True
+            else:
+                try:
+                    cat_ids.append(int(part))
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400, detail="categories must be ids or 'none'"
+                    )
+        conds = []
+        if cat_ids:
+            conds.append(Transaction.category_id.in_(cat_ids))
+        if include_none:
+            conds.append(Transaction.category_id.is_(None))
+        if conds:
+            query = query.filter(or_(*conds))
     if start:
         query = query.filter(Transaction.posted >= _parse_date(start, end_of_day=False))
     if end:

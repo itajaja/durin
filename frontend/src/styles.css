@@ -450,6 +450,115 @@ th.sortable:hover {
   color: var(--muted);
 }
 
+/* ---- multiselect combobox ---- */
+.msel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.msel-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.msel-btn {
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+  min-width: 11rem;
+  text-align: left;
+}
+
+.msel-btn-active {
+  border-color: var(--accent);
+}
+
+.msel-summary {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+.msel-caret {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.msel-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 100%;
+  width: max-content;
+  max-width: 20rem;
+  max-height: 310px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 0.35rem;
+}
+
+.msel-clear {
+  font: inherit;
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.msel-clear:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.msel-clear:hover:not(:disabled),
+.msel-opt:hover {
+  background: var(--hover);
+}
+
+/* .msel .msel-opt outranks the .filters label column layout these options
+   would otherwise inherit when the combobox sits in the filter row. */
+.msel .msel-opt {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  color: var(--fg);
+}
+
+.msel-opt input {
+  accent-color: var(--accent);
+}
+
+.msel-opt-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- categories ---- */
 .cat-dot {
   display: inline-block;

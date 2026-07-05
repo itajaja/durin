@@ -66,6 +66,11 @@ zsh gotcha: quote URLs with `?`/`&` (globbing) and don't put curl flags in
 an unquoted shell variable (zsh doesn't word-split; the cookie flag
 silently drops and everything 401s).
 
+cwd gotcha: `cd frontend && npm run build` leaves the persistent shell in
+frontend/, so a later `PYTHONPATH=backend .venv/bin/python -m app` silently
+fails (relative paths). Always `cd /Users/giacomo/code/durin` in the same
+command that launches the server.
+
 CAUTION: the database may contain the user's REAL bank data (they use the
 app live). Never wipe data/durin.db, delete connections, or run destructive
 tests against user 1's rows — use a second allowlisted test user instead.
