@@ -559,6 +559,15 @@ th.sortable:hover {
   accent-color: var(--accent);
 }
 
+button.msel-opt {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font: inherit;
+  color: var(--fg);
+  text-align: left;
+}
+
 .msel-opt-label {
   overflow: hidden;
   text-overflow: ellipsis;

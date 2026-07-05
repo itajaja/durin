@@ -46,6 +46,9 @@ export default function TransactionsPage() {
   const [batchCategory, setBatchCategory] = useState<string>("none");
   const [batchBusy, setBatchBusy] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [addRuleOpen, setAddRuleOpen] = useState(false);
+  const [addRuleBusy, setAddRuleBusy] = useState(false);
+  const addRuleRef = useRef<HTMLDivElement | null>(null);
 
   const alive = useRef(true);
   const fetchSeq = useRef(0);
@@ -70,6 +73,25 @@ export default function TransactionsPage() {
     const t = window.setTimeout(() => setDebouncedQ(q), 300);
     return () => window.clearTimeout(t);
   }, [q]);
+
+  // Close the add-substring popover on outside click / Escape.
+  useEffect(() => {
+    if (!addRuleOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (addRuleRef.current && !addRuleRef.current.contains(e.target as Node)) {
+        setAddRuleOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAddRuleOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [addRuleOpen]);
 
   // If a filtered category was removed, drop it from the filter instead of
   // silently matching nothing.
@@ -292,6 +314,33 @@ export default function TransactionsPage() {
     });
   }, []);
 
+  // Turn the current search text into a substring rule on the chosen
+  // category (applies to uncategorized transactions, like any new rule).
+  const addSearchAsRule = async (cat: Category) => {
+    const substring = debouncedQ.trim();
+    if (!substring) return;
+    setAddRuleBusy(true);
+    setError("");
+    try {
+      const res = await api<{ categorized: number }>(`/api/categories/${cat.id}/rules`, {
+        method: "POST",
+        body: JSON.stringify({ substring }),
+      });
+      setNotice(
+        `Added "${substring}" to ${cat.name} — categorized ${res.categorized} transaction${
+          res.categorized === 1 ? "" : "s"
+        }.`
+      );
+      setAddRuleOpen(false);
+      loadMeta();
+      loadFresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add the substring");
+    } finally {
+      setAddRuleBusy(false);
+    }
+  };
+
   const runBatch = async (action: "delete" | "categorize") => {
     if (selected.size === 0) return;
     if (
@@ -387,6 +436,43 @@ export default function TransactionsPage() {
             onChange={(e) => setQ(e.target.value)}
           />
         </label>
+        {debouncedQ.trim() && categories.length > 0 && (
+          <div className="msel" ref={addRuleRef}>
+            <span className="msel-label">&nbsp;</span>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              disabled={addRuleBusy}
+              onClick={() => setAddRuleOpen(!addRuleOpen)}
+            >
+              {addRuleBusy
+                ? "Adding…"
+                : `Add "${
+                    debouncedQ.trim().length > 18
+                      ? debouncedQ.trim().slice(0, 18) + "…"
+                      : debouncedQ.trim()
+                  }" to category…`}
+            </button>
+            {addRuleOpen && (
+              <div className="msel-pop">
+                {categories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="msel-opt"
+                    onClick={() => addSearchAsRule(c)}
+                  >
+                    <span className="cat-dot" style={{ background: c.color }} />
+                    <span className="msel-opt-label">
+                      {c.emoji ? `${c.emoji} ` : ""}
+                      {c.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {hasFilters && (
           <button className="btn btn-quiet" onClick={clearFilters}>
             Clear
