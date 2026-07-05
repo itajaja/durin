@@ -1,32 +1,118 @@
+/* Durin "mine" theme — Archivo + Jacquard 24, gold on chiseled slabs.
+   Tokens and treatments come from the Claude Design project
+   ("Durin Landing" / "Durin Mine"); notched corners are clip-path
+   polygons, dots are 45°-rotated squares, tables wear gold hairlines. */
+
 :root {
-  --bg: #f7f7f5;
-  --fg: #1c1c1a;
-  --muted: #6f6f68;
-  --card: #ffffff;
-  --border: #e2e2dd;
-  --accent: #2f6fed;
-  --accent-dark: #2258c4;
-  --red: #b3261e;
-  --green: #1a7f37;
-  --hover: #fafaf7;
-  --shadow: rgba(0, 0, 0, 0.08);
+  --bg: #e9e7e2;
+  --nav: #f2f1ed;
+  --panel: #f4f3ef;
+  --panel-hd: #eceae4;
+  --inset: #e0ddd6;
+  --input: #fbfaf7;
+  --line: rgba(0, 0, 0, 0.06);
+  --line-mid: rgba(0, 0, 0, 0.14);
+  --line-strong: rgba(0, 0, 0, 0.16);
+  --text: #26292e;
+  --text2: #3d4148;
+  --muted: #6e7480;
+  --faint: #9a958a;
+  --label: #8a8578;
+  --gold: #b07d1e;
+  --gold-text: #6e4f0f;
+  --gold-hd: #8a7440;
+  --gold-grad: linear-gradient(180deg, #c08a24, #a06f14);
+  --gold-btn-text: #fff8e8;
+  --gold-glow: none;
+  --gold-dot-glow: none;
+  --debit: #b14b36;
+  --credit: #3e8a5c;
+  --tab-bg: #e4e1da;
+  --row-hover: rgba(176, 125, 30, 0.06);
+  --slab-border: rgba(0, 0, 0, 0.12);
+  --slab-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(0, 0, 0, 0.08);
+  --inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 0 rgba(255, 255, 255, 0.8);
+  --chip-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+  --nav-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --gold-hairline: rgba(176, 125, 30, 0.4);
+  --vein: linear-gradient(90deg, rgba(176, 125, 30, 0) 0%, #b07d1e 18%, #d9a83c 30%, #b07d1e 46%, rgba(176, 125, 30, 0.15) 70%, rgba(176, 125, 30, 0) 100%);
+
+  /* Aliases kept from the previous theme so every rule below reads the
+     same token language. */
+  --fg: var(--text);
+  --card: var(--panel);
+  --border: var(--line-mid);
+  --accent: var(--gold);
+  --accent-dark: #8a6210;
+  --red: var(--debit);
+  --green: var(--credit);
+  --hover: var(--row-hover);
+  --shadow: rgba(0, 0, 0, 0.12);
   font-size: 15px;
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #191a17;
-  --fg: #e8e6de;
-  --muted: #9b998e;
-  --card: #22231f;
-  --border: #43443c;
-  --accent: #5a8ff0;
-  --accent-dark: #7ca5f3;
-  --red: #e08479;
-  --green: #66bb7f;
-  --hover: #282923;
-  --shadow: rgba(0, 0, 0, 0.4);
+  --bg: #0f1114;
+  --nav: #14171c;
+  --panel: #12151a;
+  --panel-hd: #171a20;
+  --inset: #0b0d10;
+  --input: #171a20;
+  --line: rgba(255, 255, 255, 0.045);
+  --line-mid: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --text: #dce0e5;
+  --text2: #c6cbd2;
+  --muted: #868e99;
+  --faint: #5c636e;
+  --label: #6b7280;
+  --gold: #e3a238;
+  --gold-text: #f0d9a8;
+  --gold-hd: #8b7a55;
+  --gold-grad: linear-gradient(180deg, #f0be5e, #d9962f);
+  --gold-btn-text: #17120a;
+  --gold-glow: 0 0 14px rgba(227, 162, 56, 0.35);
+  --gold-dot-glow: 0 0 10px rgba(227, 162, 56, 0.55);
+  --debit: #e0684a;
+  --credit: #5fb07e;
+  --tab-bg: #1d2027;
+  --row-hover: rgba(227, 162, 56, 0.05);
+  --slab-border: rgba(0, 0, 0, 0.7);
+  --slab-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.04);
+  --chip-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  --nav-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --gold-hairline: rgba(227, 162, 56, 0.28);
+  --vein: linear-gradient(90deg, rgba(227, 162, 56, 0) 0%, #e3a238 18%, #f5d07a 30%, #e3a238 46%, rgba(227, 162, 56, 0.15) 70%, rgba(227, 162, 56, 0) 100%);
+
+  --accent-dark: #f0be5e;
+  --shadow: rgba(0, 0, 0, 0.5);
   color-scheme: dark;
+}
+
+/* Notched corners (the design's stone-cut corners). Sizes per element class. */
+@keyframes duShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes duVein {
+  0% { background-position: 300% 0; }
+  100% { background-position: -300% 0; }
+}
+@keyframes duFloat {
+  0% { transform: translateY(0) rotate(45deg); opacity: 0; }
+  12% { opacity: 0.9; }
+  85% { opacity: 0.5; }
+  100% { transform: translateY(-105vh) rotate(45deg); opacity: 0; }
+}
+@keyframes duRise {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes duGlowPulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.12); }
 }
 
 * {
@@ -36,14 +122,14 @@
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-    sans-serif;
+  color: var(--text);
+  font-family: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 a {
-  color: var(--accent);
+  color: var(--gold);
 }
 
 /* ---- top bar ---- */
@@ -51,37 +137,60 @@ a {
   display: flex;
   align-items: center;
   gap: 1.25rem;
-  padding: 0.6rem 1.25rem;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 1.5rem;
+  background: var(--nav);
+  border-bottom: 1px solid var(--slab-border);
+  box-shadow: var(--nav-shadow);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
 .brand {
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: var(--fg);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: "Jacquard 24", serif;
+  font-weight: 400;
+  font-size: 1.65rem;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: var(--text);
   text-decoration: none;
+}
+
+.brand::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background: var(--gold);
+  transform: rotate(45deg);
+  box-shadow: var(--gold-dot-glow);
+  flex: none;
 }
 
 .topbar nav {
   display: flex;
-  gap: 0.75rem;
+  gap: 4px;
+  font-size: 0.87rem;
 }
 
 .topbar nav a {
   color: var(--muted);
   text-decoration: none;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
+  padding: 7px 14px;
+}
+
+.topbar nav a:hover {
+  color: var(--text);
 }
 
 .topbar nav a.active {
-  color: var(--fg);
-  background: var(--bg);
+  color: var(--gold-text);
+  background: var(--tab-bg);
   font-weight: 600;
+  box-shadow: var(--nav-shadow);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
 }
 
 .spacer {
@@ -90,14 +199,16 @@ a {
 
 .user-email {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 /* ---- layout ---- */
 main {
-  max-width: 1100px;
+  /* content-box: the 1400px is content, padding sits outside it */
+  box-sizing: content-box;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 1.25rem;
+  padding: 1.6rem 1.75rem 2.5rem;
 }
 
 .page-head {
@@ -107,37 +218,67 @@ main {
   gap: 1rem;
 }
 
+/* let the title (and its gold hairline) claim the free width */
+.page-head h2 {
+  flex: 1;
+}
+
 h2 {
-  margin: 0.5rem 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0.5rem 0 1.1rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* gold hairline running out of every page title */
+h2::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--gold-hairline), transparent);
 }
 
 .card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--slab-border);
+  box-shadow: var(--slab-shadow);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
   padding: 1rem 1.25rem;
   margin-bottom: 1.25rem;
 }
 
 .card h3 {
   margin-top: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
-/* ---- filters ---- */
+/* ---- filters (recessed tool shelf) ---- */
 .filters {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: end;
   margin: 0.75rem 0 1rem;
+  background: var(--inset);
+  border: 1px solid var(--slab-border);
+  box-shadow: var(--inset-shadow);
+  padding: 12px 14px;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
 }
 
 .filters label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  color: var(--muted);
+  gap: 0.3rem;
+  font-size: 0.67rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
 }
 
 .filters .grow {
@@ -149,35 +290,43 @@ input,
 select,
 textarea {
   font: inherit;
+  font-size: 0.85rem;
   padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--fg);
+  border: 1px solid var(--line-mid);
+  border-radius: 0;
+  background: var(--input);
+  color: var(--text);
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--gold);
   outline-offset: -1px;
+  box-shadow: var(--gold-glow);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--gold);
 }
 
 /* ---- buttons ---- */
 .btn {
   font: inherit;
+  font-size: 0.85rem;
   padding: 0.45rem 0.9rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--fg);
+  border: 1px solid var(--line-strong);
+  background: var(--input);
+  color: var(--muted);
   cursor: pointer;
   text-decoration: none;
   display: inline-block;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
 }
 
 .btn:hover:not(:disabled) {
-  border-color: var(--muted);
+  color: var(--text);
+  border-color: var(--gold-hairline);
 }
 
 .btn:disabled {
@@ -186,14 +335,15 @@ textarea:focus {
 }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--gold-grad);
+  border-color: transparent;
+  color: var(--gold-btn-text);
+  font-weight: 600;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-dark);
-  border-color: var(--accent-dark);
+  filter: brightness(1.08);
+  color: var(--gold-btn-text);
 }
 
 .btn-quiet {
@@ -201,22 +351,14 @@ textarea:focus {
 }
 
 .btn-danger {
-  color: var(--red);
-  border-color: var(--border);
+  color: var(--debit);
+  border-color: var(--line-strong);
   background: transparent;
 }
 
 .btn-danger:hover:not(:disabled) {
-  border-color: var(--red);
-}
-
-.btn-google {
-  display: block;
-  text-align: center;
-  background: var(--fg);
-  color: var(--bg);
-  border-color: var(--fg);
-  padding: 0.6rem;
+  color: var(--debit);
+  border-color: var(--debit);
 }
 
 /* ---- tables ---- */
@@ -229,48 +371,38 @@ th,
 td {
   text-align: left;
   padding: 0.55rem 0.6rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   vertical-align: top;
+  font-size: 0.87rem;
 }
 
 th {
-  font-size: 0.78rem;
+  font-size: 0.67rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  letter-spacing: 0.16em;
+  color: var(--gold-hd);
+  border-bottom: 1px solid var(--gold-hairline);
 }
 
-/* No overflow:hidden here — the inline row popovers must escape the table.
-   The corner rounding is done per corner cell instead. */
+/* No overflow:hidden or clip-path here — the inline row popovers must
+   escape the table, so this slab keeps square corners. */
 .txn-table {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--slab-border);
+  box-shadow: var(--slab-shadow);
 }
 
-.txn-table thead th:first-child {
-  border-top-left-radius: 10px;
-}
-
-.txn-table thead th:last-child {
-  border-top-right-radius: 10px;
-}
-
-.txn-table tbody tr:last-child td:first-child {
-  border-bottom-left-radius: 10px;
-}
-
-.txn-table tbody tr:last-child td:last-child {
-  border-bottom-right-radius: 10px;
+.txn-table thead th {
+  background: var(--panel-hd);
 }
 
 .txn-table tbody tr:hover {
-  background: var(--hover);
+  background: var(--row-hover);
 }
 
 .txn-table tbody tr.row-selected,
 .txn-table tbody tr.row-selected:hover {
-  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  background: color-mix(in srgb, var(--gold) 10%, var(--panel));
 }
 
 th.sortable {
@@ -279,11 +411,12 @@ th.sortable {
 }
 
 th.sortable:hover {
-  color: var(--fg);
+  color: var(--gold);
 }
 
 .num {
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .nowrap {
@@ -291,11 +424,11 @@ th.sortable:hover {
 }
 
 .neg {
-  color: var(--red);
+  color: var(--debit);
 }
 
 .pos {
-  color: var(--green);
+  color: var(--credit);
 }
 
 .pending-row {
@@ -318,67 +451,78 @@ th.sortable:hover {
 }
 
 .summary {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary strong {
+  color: var(--gold);
+  text-shadow: var(--gold-glow);
+}
+
+.summary strong.neg {
+  color: var(--debit);
+  text-shadow: none;
+}
+
+.summary strong.pos {
+  color: var(--credit);
+  text-shadow: none;
 }
 
 .badge {
   display: inline-block;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.05rem 0.5rem;
+  letter-spacing: 0.1em;
+  border: 1px solid var(--line-strong);
+  padding: 0.1rem 0.5rem;
   margin-left: 0.4rem;
   color: var(--muted);
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
 }
 
 .badge-green {
-  color: var(--green);
-  border-color: var(--green);
+  color: var(--credit);
+  border-color: var(--credit);
 }
 
 .badge-red {
-  color: var(--red);
-  border-color: var(--red);
+  color: var(--debit);
+  border-color: var(--debit);
 }
 
 .badge-amber {
-  color: #9a6700;
-  border-color: #9a6700;
-}
-
-:root[data-theme="dark"] .badge-amber {
-  color: #d9a94a;
-  border-color: #d9a94a;
+  color: var(--gold);
+  border-color: var(--gold-hairline);
 }
 
 .badge-blue {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--gold);
+  border-color: var(--gold-hairline);
 }
 
 .error-text {
-  color: var(--red);
+  color: var(--debit);
 }
 
 .alert {
   padding: 0.6rem 0.9rem;
-  border-radius: 8px;
   margin: 0.75rem 0;
   border: 1px solid;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
 }
 
 .alert-error {
-  background: color-mix(in srgb, var(--red) 10%, var(--card));
-  border-color: color-mix(in srgb, var(--red) 35%, var(--card));
-  color: var(--red);
+  background: color-mix(in srgb, var(--debit) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--debit) 35%, var(--panel));
+  color: var(--debit);
 }
 
 .alert-ok {
-  background: color-mix(in srgb, var(--green) 10%, var(--card));
-  border-color: color-mix(in srgb, var(--green) 35%, var(--card));
-  color: var(--green);
+  background: color-mix(in srgb, var(--credit) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--credit) 35%, var(--panel));
+  color: var(--credit);
 }
 
 .pager {
@@ -394,49 +538,159 @@ th.sortable:hover {
   gap: 0.4rem;
 }
 
-/* ---- login ---- */
+/* ---- login (the mine entrance) ---- */
 .login-wrap {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  overflow: hidden;
+  background: radial-gradient(1100px 700px at 50% 115%, #17130a 0%, #0c0e11 55%, #08090b 100%);
+  color: #dce0e5;
+  color-scheme: dark;
+}
+
+.login-dust {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-mote {
+  position: absolute;
+  bottom: -3vh;
+  transform: rotate(45deg);
+  opacity: 0;
+  animation: duFloat linear infinite;
+}
+
+.login-torch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: background 0.08s linear;
 }
 
 .login-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6rem;
   padding: 2rem;
   width: 100%;
-  max-width: 380px;
+  max-width: 460px;
+  background: none;
+  border: none;
 }
 
-.login-card h1 {
-  margin: 0 0 0.25rem;
+.login-wordmark {
+  position: relative;
+  margin: 0;
+  font-family: "Jacquard 24", serif;
+  font-size: clamp(72px, 16vw, 128px);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+  line-height: 1.1;
+  background: linear-gradient(100deg, #6e5520 0%, #c9922f 32%, #ffe9b0 47%, #f5d07a 50%, #ffe9b0 53%, #c9922f 68%, #6e5520 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: duShimmer 5.5s linear infinite, duRise 1s 0.15s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.login-mark-wrap {
+  position: relative;
+}
+
+.login-mark-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -60px -120px;
+  background: radial-gradient(closest-side, rgba(227, 162, 56, 0.14), transparent 70%);
+  animation: duGlowPulse 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.login-vein {
+  width: min(520px, 80vw);
+  height: 2px;
+  background: linear-gradient(90deg, rgba(227, 162, 56, 0) 0%, rgba(227, 162, 56, 0.2) 20%, #e3a238 42%, #f5d07a 50%, #e3a238 58%, rgba(227, 162, 56, 0.2) 80%, rgba(227, 162, 56, 0) 100%);
+  background-size: 300% 100%;
+  animation: duVein 7s linear infinite, duRise 1s 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .login-card .muted {
-  margin-top: 0;
+  margin: 0;
+  color: #868e99;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  animation: duRise 1s 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.login-below {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 100%;
+  max-width: 340px;
+  animation: duRise 1s 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  background: #14171c;
+  border: 1px solid rgba(227, 162, 56, 0.35);
+  color: #dce0e5;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 14px 26px;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
+}
+
+.btn-google:hover:not(:disabled) {
+  color: #dce0e5;
+  border-color: rgba(245, 208, 122, 0.9);
+  box-shadow: 0 0 24px rgba(227, 162, 56, 0.35), inset 0 0 18px rgba(227, 162, 56, 0.08);
+  transform: translateY(-1px);
 }
 
 .dev-login {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-top: 1rem;
 }
 
 .dev-login label {
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: 0.67rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.login-wrap input {
+  background: #171a20;
+  border-color: rgba(255, 255, 255, 0.09);
+  color: #dce0e5;
 }
 
 .divider {
   text-align: center;
-  color: var(--muted);
+  color: #5c636e;
   font-size: 0.8rem;
-  margin: 0.75rem 0 0.25rem;
+  margin: 0.25rem 0;
 }
 
 .add-form {
@@ -450,8 +704,10 @@ th.sortable:hover {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: 0.67rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
 }
 
 .add-form textarea {
@@ -477,31 +733,33 @@ th.sortable:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
 .msel-label {
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: 0.67rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
 }
 
 .msel-btn {
   font: inherit;
+  font-size: 0.85rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--fg);
+  border: 1px solid var(--line-mid);
+  background: var(--input);
+  color: var(--text);
   cursor: pointer;
   min-width: 11rem;
   text-align: left;
 }
 
 .msel-btn-active {
-  border-color: var(--accent);
+  border-color: var(--gold);
 }
 
 .msel-summary {
@@ -517,6 +775,8 @@ th.sortable:hover {
   font-size: 0.75rem;
 }
 
+/* Popovers float above content, so they keep square corners (a clip-path
+   would eat the drop shadow) and lean on a gold hairline instead. */
 .msel-pop {
   position: absolute;
   top: calc(100% + 4px);
@@ -527,9 +787,8 @@ th.sortable:hover {
   max-width: 20rem;
   max-height: 310px;
   overflow-y: auto;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--nav);
+  border: 1px solid var(--gold-hairline);
   box-shadow: 0 8px 24px var(--shadow);
   padding: 0.35rem;
 }
@@ -542,9 +801,8 @@ th.sortable:hover {
   padding: 0.4rem 0.6rem;
   border: none;
   background: transparent;
-  color: var(--accent);
+  color: var(--gold);
   cursor: pointer;
-  border-radius: 6px;
 }
 
 .msel-clear:disabled {
@@ -554,7 +812,7 @@ th.sortable:hover {
 
 .msel-clear:hover:not(:disabled),
 .msel-opt:hover {
-  background: var(--hover);
+  background: var(--row-hover);
 }
 
 /* .msel .msel-opt outranks the .filters label column layout these options
@@ -565,15 +823,16 @@ th.sortable:hover {
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0.6rem;
-  border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
-  font-size: 0.9rem;
-  color: var(--fg);
+  font-size: 0.87rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
 }
 
 .msel-opt input {
-  accent-color: var(--accent);
+  accent-color: var(--gold);
 }
 
 button.msel-opt {
@@ -581,7 +840,7 @@ button.msel-opt {
   background: transparent;
   width: 100%;
   font: inherit;
-  color: var(--fg);
+  color: var(--text);
   text-align: left;
 }
 
@@ -598,7 +857,6 @@ button.msel-opt {
   font-size: 1rem;
   line-height: 1;
   padding: 0 0.3rem;
-  border-radius: 999px;
   visibility: hidden;
 }
 
@@ -607,7 +865,7 @@ button.msel-opt {
 }
 
 .msel-x:hover {
-  color: var(--red);
+  color: var(--debit);
 }
 
 /* ---- inline row pickers (payee rule / quick category change) ---- */
@@ -621,7 +879,7 @@ button.msel-opt {
 .payee-tag-btn {
   border: none;
   background: transparent;
-  color: var(--accent);
+  color: var(--gold);
   cursor: pointer;
   font-size: 0.95rem;
   line-height: 1;
@@ -645,12 +903,11 @@ button.msel-opt {
   cursor: pointer;
   padding: 0.15rem 0.3rem;
   margin: -0.15rem -0.3rem;
-  border-radius: 6px;
 }
 
 .cat-chip-btn:hover {
-  background: var(--hover);
-  outline: 1px solid var(--border);
+  background: var(--row-hover);
+  outline: 1px solid var(--gold-hairline);
 }
 
 .inline-pop {
@@ -669,7 +926,7 @@ button.msel-opt {
   font-size: 0.75rem;
   color: var(--muted);
   padding: 0.3rem 0.6rem 0.4rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--gold-hairline);
   margin-bottom: 0.25rem;
   max-width: 16rem;
 }
@@ -682,24 +939,26 @@ button.msel-opt {
 /* ---- categories ---- */
 .cat-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  transform: rotate(45deg);
   flex-shrink: 0;
 }
 
 .cat-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.88rem;
+  gap: 0.45rem;
+  font-size: 0.87rem;
 }
 
 .cat-chip-boxed {
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 1px solid var(--line-mid);
+  background: var(--inset);
+  box-shadow: var(--chip-shadow);
   padding: 0.25rem 0.7rem;
-  background: var(--bg);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
 }
 
 .cat-list {
@@ -715,16 +974,24 @@ button.msel-opt {
   padding: 0.85rem 1.25rem;
 }
 
+/* pickers are recessed shelves, not raised slabs */
+.cat-picker.card,
+.asset-picker.card {
+  background: var(--inset);
+  box-shadow: var(--inset-shadow);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
 .cat-check {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .cat-check input {
-  accent-color: var(--accent);
+  accent-color: var(--gold);
 }
 
 /* ---- spending chart ---- */
@@ -750,33 +1017,32 @@ button.msel-opt {
 }
 
 .grid-line {
-  stroke: var(--border);
+  stroke: var(--line);
   stroke-width: 1;
 }
 
 .axis-line {
-  stroke: var(--muted);
+  stroke: var(--line-strong);
   stroke-width: 1;
 }
 
 .axis-label {
-  fill: var(--muted);
+  fill: var(--faint);
   font-size: 11px;
   font-family: inherit;
   font-variant-numeric: tabular-nums;
 }
 
 .hover-band {
-  fill: var(--border);
-  opacity: 0.35;
+  fill: var(--gold);
+  opacity: 0.07;
 }
 
 .chart-tooltip {
   position: absolute;
   top: 16px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--nav);
+  border: 1px solid var(--gold-hairline);
   box-shadow: 0 4px 14px var(--shadow);
   padding: 0.55rem 0.75rem;
   pointer-events: none;
@@ -794,66 +1060,20 @@ button.msel-opt {
   transition: opacity 0.12s ease;
 }
 
-/* ---- assets chart ---- */
-.crosshair {
-  stroke: var(--muted);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-
-.total-line {
-  stroke: var(--fg);
-}
-
-/* Hovered-day markers get a surface ring so overlapping lines stay legible. */
-.point-ring {
-  stroke: var(--card);
-  stroke-width: 2;
-}
-
-.total-row td {
-  border-top: 2px solid var(--border);
-  border-bottom: none;
-  font-weight: 600;
-}
-
-.total-dot {
-  fill: var(--fg);
-}
-
-.asset-picker {
-  padding: 0.6rem 1.25rem 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.picker-group .group-head {
-  padding: 0.25rem 0;
-}
-
-.group-accounts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.25rem;
-  padding-left: 1.7rem;
-}
-
 .tt-row {
   display: flex;
   align-items: center;
   gap: 0.45rem;
   padding: 0.08rem 0.3rem;
   margin: 0 -0.3rem;
-  border-radius: 5px;
 }
 
 .tt-row-active {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--gold) 14%, transparent);
 }
 
 .tt-row-active .tt-name {
-  color: var(--fg);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -868,20 +1088,28 @@ button.msel-opt {
 }
 
 .tt-total {
-  border-top: 1px solid var(--border);
-  margin-top: 0.3rem;
-  padding-top: 0.35rem;
   font-weight: 600;
 }
 
+/* the separator only makes sense when account rows precede the total */
+.tt-row + .tt-total {
+  border-top: 1px solid var(--gold-hairline);
+  margin-top: 0.3rem;
+  padding-top: 0.35rem;
+}
+
 .tt-total .tt-name {
-  color: var(--fg);
+  color: var(--text);
+}
+
+.tt-total .tt-val {
+  color: var(--gold);
+  text-shadow: var(--gold-glow);
 }
 
 code {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: var(--inset);
+  border: 1px solid var(--line-mid);
   padding: 0.1rem 0.3rem;
   font-size: 0.85em;
   word-break: break-all;
@@ -912,17 +1140,18 @@ code {
 .discrete-badge {
   font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  padding: 0.05rem 0.3rem;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  border: 1px solid var(--gold-hairline);
+  padding: 0.08rem 0.35rem;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
 }
 
 .sync-note {
-  max-width: 1100px;
+  box-sizing: content-box;
+  max-width: 1400px;
   margin: 0.5rem auto 0;
-  padding: 0.5rem 1.25rem;
+  padding: 0.5rem 1.75rem;
   color: var(--muted);
   font-size: 0.88rem;
 }
@@ -932,13 +1161,14 @@ code {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background: var(--card);
-  border: 1px solid var(--accent);
-  border-radius: 10px;
+  background: var(--nav);
+  border: 1px solid var(--gold-hairline);
+  box-shadow: var(--slab-shadow);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   padding: 0.55rem 0.9rem;
   margin-bottom: 0.75rem;
   position: sticky;
-  top: 3.2rem;
+  top: 3.6rem;
   z-index: 5;
 }
 
@@ -953,7 +1183,8 @@ code {
 
 .btn-small {
   padding: 0.2rem 0.5rem;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
 }
 
 .manual-mark {
@@ -964,7 +1195,7 @@ code {
 
 /* ---- inline transaction editor ---- */
 .edit-row td {
-  background: var(--hover);
+  background: var(--panel-hd);
 }
 
 .edit-form {
@@ -983,9 +1214,11 @@ code {
 .edit-fields label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  color: var(--muted);
+  gap: 0.3rem;
+  font-size: 0.67rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
   flex: 1;
   min-width: 160px;
 }
@@ -1008,17 +1241,21 @@ code {
 .cat-form-fields label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  color: var(--muted);
+  gap: 0.3rem;
+  font-size: 0.67rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
 }
 
 .cat-form-fields .check-label {
   flex-direction: row;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.9rem;
-  color: var(--fg);
+  font-size: 0.87rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
   padding-bottom: 0.4rem;
 }
 
@@ -1033,8 +1270,10 @@ code {
 
 .swatch-label {
   display: block;
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: 0.67rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--label);
   margin-bottom: 0.35rem;
 }
 
@@ -1048,8 +1287,9 @@ code {
 .swatch {
   width: 26px;
   height: 26px;
-  border-radius: 7px;
-  border: 1px solid var(--border);
+  border-radius: 0;
+  border: 1px solid var(--line-strong);
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
   cursor: pointer;
   padding: 0;
 }
@@ -1059,7 +1299,7 @@ code {
 }
 
 .swatch-selected {
-  outline: 2px solid var(--fg);
+  outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 
@@ -1097,32 +1337,34 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  background: var(--inset);
+  border: 1px solid var(--line-mid);
+  box-shadow: var(--chip-shadow);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
   padding: 0.2rem 0.35rem 0.2rem 0.7rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8rem;
+  color: var(--text2);
 }
 
 .rule-kind {
-  color: var(--accent);
+  color: var(--gold);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
   margin-right: 0.3rem;
 }
 
 .rule-x {
   border: none;
   background: transparent;
-  color: var(--muted);
+  color: var(--faint);
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
   padding: 0 0.25rem;
-  border-radius: 999px;
 }
 
 .rule-x:hover {
-  color: var(--red);
+  color: var(--debit);
 }
 
 .rule-add {
@@ -1138,9 +1380,9 @@ code {
 .preview-box {
   margin-top: 0.6rem;
   padding: 0.6rem 0.8rem;
-  background: var(--bg);
-  border: 1px dashed var(--border);
-  border-radius: 8px;
+  background: var(--inset);
+  border: 1px dashed var(--line-mid);
+  box-shadow: var(--chip-shadow);
 }
 
 .preview-list {
@@ -1151,4 +1393,68 @@ code {
 
 .preview-list li {
   padding: 0.08rem 0;
+}
+
+/* ---- assets chart ---- */
+.crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.total-line {
+  stroke: var(--text);
+  stroke-width: 1.8;
+}
+
+.total-dot {
+  fill: var(--text);
+}
+
+/* Hovered-day markers get a surface ring so overlapping lines stay legible. */
+.point-ring {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.bal-cell {
+  font-weight: 600;
+}
+
+.card-head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+
+.total-row td {
+  border-top: 2px solid var(--gold-hairline);
+  border-bottom: none;
+  font-weight: 700;
+}
+
+.total-row .num {
+  color: var(--gold);
+  text-shadow: var(--gold-glow);
+}
+
+.asset-picker {
+  padding: 0.6rem 1.25rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.picker-group .group-head {
+  padding: 0.25rem 0;
+  font-size: 0.87rem;
+}
+
+.group-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  padding-left: 1.7rem;
 }
