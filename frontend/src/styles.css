@@ -19,7 +19,7 @@
   --fg: #e8e6de;
   --muted: #9b998e;
   --card: #22231f;
-  --border: #35362f;
+  --border: #43443c;
   --accent: #5a8ff0;
   --accent-dark: #7ca5f3;
   --red: #e08479;
@@ -862,6 +862,7 @@ code {
   align-items: flex-start;
   gap: 0.6rem;
   flex-wrap: wrap;
+  margin-bottom: 1rem;
 }
 
 .cat-page-actions form {

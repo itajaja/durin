@@ -19,11 +19,9 @@ export interface Preset {
   range: () => { start: string; end: string };
 }
 
+// Ordered from the current period outward: month scopes, rolling windows
+// short to long, then year scopes.
 export const PRESETS: Preset[] = [
-  {
-    label: "3 months",
-    range: () => ({ start: iso(monthsAgo(3)), end: iso(new Date()) }),
-  },
   {
     label: "This month to date",
     range: () => {
@@ -42,12 +40,23 @@ export const PRESETS: Preset[] = [
     },
   },
   {
+    label: "3 months",
+    range: () => ({ start: iso(monthsAgo(3)), end: iso(new Date()) }),
+  },
+  {
     label: "6 months",
     range: () => ({ start: iso(monthsAgo(6)), end: iso(new Date()) }),
   },
   {
     label: "1 year",
     range: () => ({ start: iso(monthsAgo(12)), end: iso(new Date()) }),
+  },
+  {
+    label: "This year to date",
+    range: () => {
+      const now = new Date();
+      return { start: iso(new Date(now.getFullYear(), 0, 1)), end: iso(now) };
+    },
   },
   {
     label: "Last year",
@@ -57,13 +66,6 @@ export const PRESETS: Preset[] = [
         start: iso(new Date(now.getFullYear() - 1, 0, 1)),
         end: iso(new Date(now.getFullYear() - 1, 11, 31)),
       };
-    },
-  },
-  {
-    label: "This year to date",
-    range: () => {
-      const now = new Date();
-      return { start: iso(new Date(now.getFullYear(), 0, 1)), end: iso(now) };
     },
   },
 ];

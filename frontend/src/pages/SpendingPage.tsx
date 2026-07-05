@@ -267,6 +267,13 @@ export default function SpendingPage() {
       </div>
 
       <div className="cat-picker card">
+        <button
+          className="btn btn-quiet btn-small"
+          disabled={!selected || selected.size === 0}
+          onClick={() => setSelected(new Set())}
+        >
+          Unselect all
+        </button>
         {pickerEntries.map((entry) => (
           <label key={entry.key} className="cat-check">
             <input

@@ -231,7 +231,7 @@ def list_categories(user: User = Depends(get_current_user), db: Session = Depend
         db.query(Category)
         .options(selectinload(Category.rules))
         .filter(Category.user_id == user.id)
-        .order_by(Category.name)
+        .order_by(func.lower(Category.name))
         .all()
     )
     return {
