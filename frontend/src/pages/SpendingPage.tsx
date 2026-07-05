@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, formatMoney } from "../api";
 import DatePresets from "../components/DatePresets";
 import {
@@ -72,10 +73,21 @@ interface PickerEntry {
 }
 
 export default function SpendingPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlInit = useRef({
+    from: searchParams.get("from"),
+    to: searchParams.get("to"),
+    g: searchParams.get("g"),
+    cats: searchParams.get("cats"),
+  });
+
   const [{ start: defStart, end: defEnd }] = useState(defaultRange);
-  const [start, setStart] = useState(defStart);
-  const [end, setEnd] = useState(defEnd);
-  const [granularity, setGranularity] = useState<Granularity>("month");
+  const [start, setStart] = useState(urlInit.current.from ?? defStart);
+  const [end, setEnd] = useState(urlInit.current.to ?? defEnd);
+  const [granularity, setGranularity] = useState<Granularity>(() => {
+    const g = urlInit.current.g;
+    return g === "day" || g === "week" || g === "year" ? g : "month";
+  });
   const [categories, setCategories] = useState<Category[]>([]);
   const [selected, setSelected] = useState<Set<string> | null>(null); // null = not initialized
   const [data, setData] = useState<SpendingResponse | null>(null);
@@ -115,7 +127,15 @@ export default function SpendingPage() {
       const prevKnown = new Set(knownIds.current);
       knownIds.current = validKeys;
       setSelected((prev) => {
-        if (prev === null) return new Set(validKeys);
+        if (prev === null) {
+          // First hydration: honor a subset carried in the URL.
+          const fromUrl = urlInit.current.cats;
+          if (fromUrl != null) {
+            if (fromUrl === "~") return new Set();
+            return new Set(fromUrl.split(",").filter((k) => validKeys.has(k)));
+          }
+          return new Set(validKeys);
+        }
         // Keep the user's choices for keys that still exist; newly created
         // categories join checked by default.
         const next = new Set([...prev].filter((k) => validKeys.has(k)));
@@ -149,6 +169,23 @@ export default function SpendingPage() {
   }, [loadCategories, loadAccounts]);
 
   const selectedKey = selected ? [...selected].sort().join(",") : "";
+
+  // Mirror the state into the URL so reloads and shared links restore it.
+  useEffect(() => {
+    if (selected === null && urlInit.current.cats != null) return; // not hydrated
+    const allSelected =
+      selected === null ||
+      (knownIds.current.size > 0 && [...knownIds.current].every((k) => selected.has(k)));
+    const p = new URLSearchParams();
+    if (start !== defStart) p.set("from", start);
+    if (end !== defEnd) p.set("to", end);
+    if (granularity !== "month") p.set("g", granularity);
+    if (selected !== null && !allSelected) {
+      p.set("cats", selected.size === 0 ? "~" : [...selected].sort().join(","));
+    }
+    setSearchParams(p, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start, end, granularity, selectedKey, selected === null]);
 
   const loadSpending = useCallback(async () => {
     if (selected === null) return;

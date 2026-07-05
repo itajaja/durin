@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, formatDate, formatMoney } from "../api";
 import DatePresets from "../components/DatePresets";
 import MultiSelect from "../components/MultiSelect";
@@ -24,20 +25,37 @@ type SortDir = "asc" | "desc";
 const PAGE_SIZE = 50;
 
 export default function TransactionsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Snapshot of the URL at mount: it seeds the initial state, then the URL
+  // follows the state (replace, no history spam).
+  const urlInit = useRef({
+    accounts: searchParams.get("accounts"),
+    cats: searchParams.get("cats"),
+    from: searchParams.get("from") ?? "",
+    to: searchParams.get("to") ?? "",
+    q: searchParams.get("q") ?? "",
+    sort: searchParams.get("sort"),
+    dir: searchParams.get("dir"),
+  });
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   // Accounts: empty set = no filter (all).
-  const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
+  const [accountIds, setAccountIds] = useState<Set<string>>(
+    () => new Set(urlInit.current.accounts?.split(",").filter(Boolean) ?? [])
+  );
   // Categories use the facet model: every key ("none" + ids) starts
   // selected; null until the category list loads.
   const [categoryKeys, setCategoryKeys] = useState<Set<string> | null>(null);
   const knownCatKeys = useRef<Set<string>>(new Set());
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
-  const [sort, setSort] = useState<SortField>("posted");
-  const [dir, setDir] = useState<SortDir>("desc");
+  const [start, setStart] = useState(urlInit.current.from);
+  const [end, setEnd] = useState(urlInit.current.to);
+  const [q, setQ] = useState(urlInit.current.q);
+  const [debouncedQ, setDebouncedQ] = useState(urlInit.current.q);
+  const [sort, setSort] = useState<SortField>(
+    urlInit.current.sort === "amount" ? "amount" : "posted"
+  );
+  const [dir, setDir] = useState<SortDir>(urlInit.current.dir === "asc" ? "asc" : "desc");
 
   const [items, setItems] = useState<Txn[]>([]);
   const [summary, setSummary] = useState<{
@@ -169,7 +187,15 @@ export default function TransactionsPage() {
     const prevKnown = knownCatKeys.current;
     knownCatKeys.current = valid;
     setCategoryKeys((prev) => {
-      if (prev === null) return new Set(valid);
+      if (prev === null) {
+        // First hydration: honor a subset carried in the URL.
+        const fromUrl = urlInit.current.cats;
+        if (fromUrl != null) {
+          if (fromUrl === "~") return new Set();
+          return new Set(fromUrl.split(",").filter((k) => valid.has(k)));
+        }
+        return new Set(valid);
+      }
       const wasAll = [...prevKnown].every((k) => prev.has(k));
       const next = new Set([...prev].filter((k) => valid.has(k)));
       if (wasAll) {
@@ -187,6 +213,25 @@ export default function TransactionsPage() {
   const categoriesKey =
     categoryKeys === null || allCatsSelected ? "" : [...categoryKeys].sort().join(",");
   const noCatsSelected = categoryKeys !== null && categoryKeys.size === 0;
+
+  // Mirror the state into the URL so reloads and shared links restore it.
+  useEffect(() => {
+    if (categoryKeys === null && urlInit.current.cats != null) return; // not hydrated yet
+    const p = new URLSearchParams();
+    if (accountsKey) p.set("accounts", accountsKey);
+    if (categoryKeys !== null && !allCatsSelected) {
+      p.set("cats", categoryKeys.size === 0 ? "~" : [...categoryKeys].sort().join(","));
+    }
+    if (start) p.set("from", start);
+    if (end) p.set("to", end);
+    if (debouncedQ) p.set("q", debouncedQ);
+    if (sort !== "posted" || dir !== "desc") {
+      p.set("sort", sort);
+      p.set("dir", dir);
+    }
+    setSearchParams(p, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountsKey, categoriesKey, allCatsSelected, start, end, debouncedQ, sort, dir]);
 
   const loadMeta = useCallback(async () => {
     try {
