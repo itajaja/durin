@@ -264,6 +264,12 @@ def _do_sync(connection_id: int) -> None:
         conn = db.get(Connection, connection_id)
         if conn is None:
             return
+        if conn.access_url.startswith("import:"):
+            # CSV-imported history has no upstream to sync against. Bump the
+            # sync stamp so the scheduler doesn't re-queue it every tick.
+            conn.last_sync_at = now_ts()
+            db.commit()
+            return
         entry = SyncLog(connection_id=conn.id)
         db.add(entry)
         conn.last_sync_at = now_ts()

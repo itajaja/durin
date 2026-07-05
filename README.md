@@ -82,7 +82,30 @@ a stacked bar chart: pick the categories, a date range (with quick presets),
 and a grouping (day / week / month / year). "Not spending" categories never
 count there.
 
-## Google sign-in
+## Importing historical transactions
+
+`backend/scripts/import_csv.py` imports a Copilot/Monarch-style CSV export
+(columns: date, name, amount, status, category, type, excluded, account,
+account mask, note…):
+
+```bash
+PYTHONPATH=backend .venv/bin/python backend/scripts/import_csv.py \
+    --csv ~/Documents/transactions.csv --email you@example.com          # dry run
+PYTHONPATH=backend .venv/bin/python backend/scripts/import_csv.py \
+    --csv ~/Documents/transactions.csv --email you@example.com --commit
+```
+
+CSV accounts matching an existing account by last-4 mask import only rows
+older than that account's earliest bank-feed transaction (the CSV provides
+pre-history; the bank feed owns the present — no duplicates). Unmatched
+accounts are created under an "Imported history" connection that syncs
+never touch. Amounts are sign-flipped (the export uses positive = expense),
+income/transfer types map to your Income/Transfers categories, other CSV
+categories map case-insensitively or are created, and categorized imports
+are marked manual so rule passes leave them alone. `--revert` removes
+everything a previous import added. Re-running the same file is a no-op;
+before importing a *newer* export, `--revert` first (row fingerprints hash
+the raw CSV text and formatting drift would defeat deduplication).
 
 Dev login (`DEV_LOGIN=true` in `.env`) works out of the box for local use. To
 enable Google:
