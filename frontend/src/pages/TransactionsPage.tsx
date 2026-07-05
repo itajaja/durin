@@ -19,9 +19,12 @@ const PAGE_SIZE = 50;
 export default function TransactionsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  // Empty set = no filter (all). Category keys are ids plus "none".
+  // Accounts: empty set = no filter (all).
   const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
-  const [categoryKeys, setCategoryKeys] = useState<Set<string>>(new Set());
+  // Categories use the facet model: every key ("none" + ids) starts
+  // selected; null until the category list loads.
+  const [categoryKeys, setCategoryKeys] = useState<Set<string> | null>(null);
+  const knownCatKeys = useRef<Set<string>>(new Set());
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [q, setQ] = useState("");
@@ -93,19 +96,33 @@ export default function TransactionsPage() {
     };
   }, [addRuleOpen]);
 
-  // If a filtered category was removed, drop it from the filter instead of
-  // silently matching nothing.
+  // Initialize the facet selection to "everything" once categories load;
+  // afterwards drop dead keys and auto-include newly created categories
+  // only while the selection still means "all".
   useEffect(() => {
     if (categories.length === 0) return;
     const valid = new Set(["none", ...categories.map((c) => String(c.id))]);
+    const prevKnown = knownCatKeys.current;
+    knownCatKeys.current = valid;
     setCategoryKeys((prev) => {
-      const kept = [...prev].filter((k) => valid.has(k));
-      return kept.length === prev.size ? prev : new Set(kept);
+      if (prev === null) return new Set(valid);
+      const wasAll = [...prevKnown].every((k) => prev.has(k));
+      const next = new Set([...prev].filter((k) => valid.has(k)));
+      if (wasAll) {
+        for (const k of valid) next.add(k);
+      }
+      return next;
     });
   }, [categories]);
 
+  const allCatKeys =
+    categories.length > 0 ? ["none", ...categories.map((c) => String(c.id))] : [];
+  const allCatsSelected =
+    categoryKeys === null || allCatKeys.every((k) => categoryKeys.has(k));
   const accountsKey = [...accountIds].sort().join(",");
-  const categoriesKey = [...categoryKeys].sort().join(",");
+  const categoriesKey =
+    categoryKeys === null || allCatsSelected ? "" : [...categoryKeys].sort().join(",");
+  const noCatsSelected = categoryKeys !== null && categoryKeys.size === 0;
 
   const loadMeta = useCallback(async () => {
     try {
@@ -142,6 +159,15 @@ export default function TransactionsPage() {
 
   const loadFresh = useCallback(async () => {
     const mySeq = ++fetchSeq.current;
+    if (noCatsSelected) {
+      // Everything was ×'d out of the category facet: nothing can match.
+      setItems([]);
+      setSummary({ total: 0, net: 0, spend: 0, income: 0 });
+      setHasMore(false);
+      setSelected(new Set());
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const result = await api<TxnPage>(`/api/transactions?${buildParams(1)}`);
@@ -168,7 +194,7 @@ export default function TransactionsPage() {
     } finally {
       if (alive.current && mySeq === fetchSeq.current) setLoading(false);
     }
-  }, [buildParams, loadMeta]);
+  }, [buildParams, loadMeta, noCatsSelected]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || loading || !hasMore) return;
@@ -253,14 +279,14 @@ export default function TransactionsPage() {
 
   const clearFilters = () => {
     setAccountIds(new Set());
-    setCategoryKeys(new Set());
+    setCategoryKeys(new Set(allCatKeys));
     setStart("");
     setEnd("");
     setQ("");
   };
 
   const hasFilters =
-    accountIds.size > 0 || categoryKeys.size > 0 || Boolean(start || end || q);
+    accountIds.size > 0 || !allCatsSelected || Boolean(start || end || q);
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
 
   // Summary currency: the one shared by the accounts in view (the selected
@@ -400,6 +426,7 @@ export default function TransactionsPage() {
           onChange={setAccountIds}
         />
         <MultiSelect
+          facet
           label="Categories"
           allLabel="All categories"
           options={[
@@ -410,7 +437,7 @@ export default function TransactionsPage() {
               color: c.color,
             })),
           ]}
-          selected={categoryKeys}
+          selected={categoryKeys ?? new Set(allCatKeys)}
           onChange={setCategoryKeys}
         />
         <label>
