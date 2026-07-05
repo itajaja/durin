@@ -497,7 +497,19 @@ export default function TransactionsPage() {
                   }}
                 />
               ) : (
-                <tr key={t.id} className={t.pending ? "pending-row" : ""}>
+                <tr
+                  key={t.id}
+                  className={`${t.pending ? "pending-row " : ""}${
+                    selected.has(t.id) ? "row-selected" : ""
+                  }`}
+                  onClick={(e) => {
+                    // Clicking the row toggles selection — but not when the
+                    // click was on a control or the user is selecting text.
+                    if ((e.target as HTMLElement).closest("button, input, a")) return;
+                    if (window.getSelection()?.toString()) return;
+                    toggleSelected(t.id);
+                  }}
+                >
                   <td className="check-col">
                     <input
                       type="checkbox"

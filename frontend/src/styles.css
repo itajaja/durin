@@ -251,6 +251,11 @@ th {
   background: var(--hover);
 }
 
+.txn-table tbody tr.row-selected,
+.txn-table tbody tr.row-selected:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+}
+
 th.sortable {
   cursor: pointer;
   user-select: none;
