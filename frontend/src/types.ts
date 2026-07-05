@@ -118,5 +118,31 @@ export interface SyncStatus {
 
 export const UNCATEGORIZED_COLOR = "#9b998e";
 
+/** Category color palette (validated for the spending chart: lightness band
+ * and chroma floor pass; the neutral gray is deliberate for not-spending
+ * categories). Ordered so neighboring swatches stay distinguishable. */
+export const CATEGORY_COLORS = [
+  "#2a78d6", // blue
+  "#eda100", // amber
+  "#008300", // green
+  "#e34948", // red
+  "#00a3d8", // cyan
+  "#93379f", // plum
+  "#66a61e", // chartreuse
+  "#e87ba4", // pink
+  "#0aa08c", // teal
+  "#a5692c", // brown
+  "#4a3aa7", // indigo
+  "#e88a83", // salmon
+  "#1baf7a", // emerald
+  "#b02e63", // raspberry
+  "#4b6cb0", // slate blue
+  "#eb6834", // orange
+  "#8a6fd1", // lavender
+  "#85871f", // olive
+  "#8a8984", // gray (for transfers / not-spending)
+  "#c98500", // gold
+];
+
 /** Window event dispatched by the top-bar refresh when a sync completes. */
 export const REFRESHED_EVENT = "durin:refreshed";

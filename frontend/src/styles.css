@@ -711,11 +711,41 @@ code {
   width: 4.5rem;
 }
 
-input[type="color"] {
-  width: 3rem;
-  height: 2.2rem;
-  padding: 0.15rem;
+/* ---- color swatches ---- */
+.swatch-field {
+  margin-bottom: 0.75rem;
+}
+
+.swatch-label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-width: 420px;
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
   cursor: pointer;
+  padding: 0;
+}
+
+.swatch:hover {
+  transform: scale(1.12);
+}
+
+.swatch-selected {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
 }
 
 .cat-card {

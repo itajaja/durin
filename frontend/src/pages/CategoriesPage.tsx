@@ -1,18 +1,46 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api, formatDate, formatMoney } from "../api";
-import { CategoriesResponse, Category, PreviewResponse, REFRESHED_EVENT } from "../types";
+import {
+  CATEGORY_COLORS,
+  CategoriesResponse,
+  Category,
+  PreviewResponse,
+  REFRESHED_EVENT,
+} from "../types";
 
-// Default color cycle for new categories (validated categorical palette).
-const PALETTE = [
-  "#2a78d6",
-  "#1baf7a",
-  "#eda100",
-  "#008300",
-  "#4a3aa7",
-  "#e34948",
-  "#e87ba4",
-  "#eb6834",
-];
+function ColorSwatches({
+  value,
+  onChange,
+  legacy,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  legacy?: string;
+}) {
+  // A category created before the palette existed keeps its color: show it
+  // as an extra swatch, anchored to the ORIGINAL color (not the live value)
+  // so it stays selectable after trying other swatches.
+  const options =
+    legacy && !CATEGORY_COLORS.includes(legacy)
+      ? [legacy, ...CATEGORY_COLORS]
+      : CATEGORY_COLORS;
+  return (
+    <div className="swatch-grid" role="radiogroup" aria-label="Category color">
+      {options.map((c) => (
+        <button
+          key={c}
+          type="button"
+          className={`swatch${c === value ? " swatch-selected" : ""}`}
+          style={{ background: c }}
+          title={c}
+          aria-label={`Color ${c}`}
+          aria-pressed={c === value}
+          onClick={() => onChange(c)}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function CategoriesPage() {
   const [data, setData] = useState<CategoriesResponse | null>(null);
@@ -68,7 +96,7 @@ export default function CategoriesPage() {
       {notice && <div className="alert alert-ok">{notice}</div>}
 
       <NewCategoryForm
-        existingCount={data?.categories.length ?? 0}
+        usedColors={data?.categories.map((c) => c.color) ?? []}
         onCreated={(c) => {
           flash(`Created ${c.name}.`);
           load();
@@ -107,25 +135,26 @@ export default function CategoriesPage() {
 }
 
 function NewCategoryForm({
-  existingCount,
+  usedColors,
   onCreated,
   onError,
 }: {
-  existingCount: number;
+  usedColors: string[];
   onCreated: (c: Category) => void;
   onError: (msg: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("");
-  const [color, setColor] = useState(PALETTE[0]);
+  const [color, setColor] = useState(CATEGORY_COLORS[0]);
   const [isTransaction, setIsTransaction] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const openForm = () => {
-    // Default the color when the form opens; never overwrite a choice the
-    // user already made while the form is showing.
-    setColor(PALETTE[existingCount % PALETTE.length]);
+    // Default to the first palette color no other category uses; never
+    // overwrite a choice the user already made while the form is showing.
+    const free = CATEGORY_COLORS.find((c) => !usedColors.includes(c));
+    setColor(free ?? CATEGORY_COLORS[usedColors.length % CATEGORY_COLORS.length]);
     setOpen(true);
   };
 
@@ -174,10 +203,6 @@ function NewCategoryForm({
             className="emoji-input"
           />
         </label>
-        <label>
-          Color
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-        </label>
         <label className="check-label">
           <input
             type="checkbox"
@@ -186,6 +211,10 @@ function NewCategoryForm({
           />
           Not spending (transfers, card payments…)
         </label>
+      </div>
+      <div className="swatch-field">
+        <span className="swatch-label">Color</span>
+        <ColorSwatches value={color} onChange={setColor} />
       </div>
       <div className="edit-actions">
         <div className="spacer" />
@@ -350,10 +379,6 @@ function CategoryCard({
                 className="emoji-input"
               />
             </label>
-            <label>
-              Color
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-            </label>
             <label className="check-label">
               <input
                 type="checkbox"
@@ -362,6 +387,10 @@ function CategoryCard({
               />
               Not spending
             </label>
+          </div>
+          <div className="swatch-field">
+            <span className="swatch-label">Color</span>
+            <ColorSwatches value={color} onChange={setColor} legacy={category.color} />
           </div>
           <div className="edit-actions">
             <button type="button" className="btn btn-quiet" disabled={busy} onClick={recategorize}>
