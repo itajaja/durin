@@ -83,27 +83,20 @@ export default function CategoriesPage() {
     setError("");
   };
 
-  const recategorizeAll = async () => {
-    if (
-      !window.confirm(
-        "Re-derive every transaction from the current substrings? " +
-          "Transactions matching no substring become uncategorized. " +
-          "Hand-categorized transactions are not touched."
-      )
-    ) {
-      return;
-    }
+  // Applies the current substrings to uncategorized transactions only —
+  // already-categorized rows are never touched.
+  const categorizeUncategorized = async () => {
     setRecatBusy(true);
     setError("");
     try {
-      const res = await api<{ changed: number }>("/api/categorize/all", {
+      const res = await api<{ changed: number }>("/api/categorize/uncategorized", {
         method: "POST",
         body: "{}",
       });
-      flash(`Recategorized ${res.changed} transaction${res.changed === 1 ? "" : "s"}.`);
+      flash(`Categorized ${res.changed} transaction${res.changed === 1 ? "" : "s"}.`);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Recategorize failed");
+      setError(err instanceof Error ? err.message : "Categorization failed");
     } finally {
       setRecatBusy(false);
     }
@@ -132,8 +125,13 @@ export default function CategoriesPage() {
           onError={setError}
         />
         {data && data.categories.length > 0 && (
-          <button className="btn btn-quiet" disabled={recatBusy} onClick={recategorizeAll}>
-            {recatBusy ? "Recategorizing…" : "Recategorize all"}
+          <button
+            className="btn btn-quiet"
+            disabled={recatBusy}
+            onClick={categorizeUncategorized}
+            title="Runs the substrings over uncategorized transactions only"
+          >
+            {recatBusy ? "Categorizing…" : "Categorize uncategorized"}
           </button>
         )}
       </div>

@@ -440,9 +440,13 @@ def recategorize_category(
     return {"ok": True, **result}
 
 
-@router.post("/categorize/all")
-def recategorize_all(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    changed = categorize.recategorize_all(db, user.id)
+@router.post("/categorize/uncategorized")
+def categorize_uncategorized(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """Run the rules over uncategorized transactions only — nothing that
+    already has a category is touched."""
+    changed = categorize.categorize_uncategorized(db, user.id)
     return {"ok": True, "changed": changed}
 
 
