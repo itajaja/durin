@@ -21,6 +21,49 @@ class Base(DeclarativeBase):
     pass
 
 
+class Category(Base):
+    """A per-user budget category, managed from the Categories page.
+
+    is_transaction=True marks money movements that aren't real spending
+    (transfers, credit-card payments): they are excluded from the Spending
+    page's numbers.
+    """
+
+    __tablename__ = "categories"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String, index=True)
+    emoji: Mapped[str] = mapped_column(String, default="")
+    color: Mapped[str] = mapped_column(String, default="#8a8984")
+    is_transaction: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[int] = mapped_column(Integer, default=now_ts)
+
+    rules: Mapped[list["CategoryRule"]] = relationship(
+        back_populates="category", passive_deletes=True, order_by="CategoryRule.id"
+    )
+
+
+class CategoryRule(Base):
+    """A substring rule: transactions whose description/payee/memo contain
+    the substring (case-insensitive) belong to the rule's category. Rules
+    match in creation order; first match wins."""
+
+    __tablename__ = "category_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id", ondelete="CASCADE"), index=True
+    )
+    substring: Mapped[str] = mapped_column(String)
+    created_at: Mapped[int] = mapped_column(Integer, default=now_ts)
+
+    category: Mapped[Category] = relationship(back_populates="rules")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -114,6 +157,19 @@ class Transaction(Base):
     payee: Mapped[str] = mapped_column(Text, default="")
     memo: Mapped[str] = mapped_column(Text, default="")
     pending: Mapped[bool] = mapped_column(Boolean, default=False)
+    # NULL = uncategorized. A transaction belongs to at most one category.
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # Set when the user assigned the category by hand (single or batch):
+    # rule-based recategorization never touches manual assignments.
+    category_manual: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Soft delete: the bank will keep reporting this transaction on every
+    # sync, so a hard delete would just resurrect it.
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Set when the user amended description/payee/memo: sync upserts keep
+    # updating bank facts (amount, posted, pending) but leave edited text.
+    edited: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[int] = mapped_column(Integer, default=now_ts)
 
     account: Mapped[Account] = relationship(back_populates="transactions")

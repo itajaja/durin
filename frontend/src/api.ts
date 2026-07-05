@@ -25,9 +25,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (await resp.json()) as T;
 }
 
-export function formatMoney(amountStr: string, currency: string): string {
-  const value = Number(amountStr);
-  if (!Number.isFinite(value)) return amountStr;
+export function formatMoney(amount: string | number, currency: string): string {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return String(amount);
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",

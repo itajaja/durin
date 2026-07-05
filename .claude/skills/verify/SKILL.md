@@ -48,7 +48,27 @@ curl -s -b /tmp/ck.txt 'localhost:8400/api/transactions?page_size=3'
 
 Key flows worth driving after changes: login → transactions table
 (filters/sort/pagination), Settings → add connection via the FORM (not just
-the API), Sync now, Delete, "Refresh from banks" on the Transactions page.
+the API), Sync now, Delete, "Refresh from banks" on the Transactions page,
+category filter + chips, and the Spending page (picker toggles, hover
+tooltip, granularity/date changes).
+
+Categories: per-user, managed via API/UI (no script). Demo-data substrings
+that match: "grocer", "fishin", "pay day". Key endpoints: POST
+/api/categories, POST /api/categories/{id}/rules (applies to uncategorized
+only), DELETE .../rules/{rid} (moves nothing), POST
+/api/categories/{id}/recategorize (never touches category_manual rows),
+GET /api/categories/preview?substring=x. Transactions: PATCH
+/api/transactions/{id} (amend text → edited flag; category → manual flag),
+POST /api/transactions/batch {ids, action: delete|categorize}. Soft-deleted
+rows must stay gone across syncs (check `deleted` in sqlite).
+
+zsh gotcha: quote URLs with `?`/`&` (globbing) and don't put curl flags in
+an unquoted shell variable (zsh doesn't word-split; the cookie flag
+silently drops and everything 401s).
+
+CAUTION: the database may contain the user's REAL bank data (they use the
+app live). Never wipe data/durin.db, delete connections, or run destructive
+tests against user 1's rows — use a second allowlisted test user instead.
 
 ## Gotchas
 

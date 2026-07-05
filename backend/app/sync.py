@@ -15,6 +15,7 @@ import time
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from . import categorize
 from .config import settings
 from .db import SessionLocal
 from .models import Account, Connection, SyncLog, Transaction, now_ts
@@ -91,7 +92,11 @@ def _sync_start_date(db: Session, conn: Connection) -> int:
     oldest_pending = (
         db.query(func.min(Transaction.posted))
         .join(Account, Transaction.account_id == Account.id)
-        .filter(Account.connection_id == conn.id, Transaction.pending.is_(True))
+        .filter(
+            Account.connection_id == conn.id,
+            Transaction.pending.is_(True),
+            Transaction.deleted.is_(False),
+        )
         .scalar()
     )
     if oldest_pending:
@@ -191,7 +196,15 @@ def _upsert_transactions(
                 )
             )
             added += 1
+        elif row.deleted:
+            # User deleted this transaction; the bank still reports it, but
+            # it must stay gone.
+            continue
         else:
+            if row.edited:
+                # Keep the user's amended text; bank facts still update.
+                for k in ("description", "payee", "memo"):
+                    new_vals[k] = getattr(row, k)
             changed = any(getattr(row, k) != v for k, v in new_vals.items())
             for k, v in new_vals.items():
                 setattr(row, k, v)
@@ -208,6 +221,7 @@ def _upsert_transactions(
             .filter(
                 Transaction.account_id == account.id,
                 Transaction.pending.is_(True),
+                Transaction.deleted.is_(False),
                 Transaction.posted >= window_start,
             )
             .all()
@@ -313,6 +327,13 @@ def _do_sync(connection_id: int) -> None:
         entry.txns_updated = updated
         entry.finished_at = now_ts()
         db.commit()
+        # Newly-synced transactions arrive uncategorized; match them against
+        # the user's rules right away so they show up categorized in the UI.
+        if added or updated:
+            try:
+                categorize.categorize_uncategorized(db, conn.user_id)
+            except Exception:
+                log.exception("post-sync categorization failed for %s", connection_id)
         log.info(
             "sync %s %s: %d accounts, +%d/%d txns",
             connection_id,

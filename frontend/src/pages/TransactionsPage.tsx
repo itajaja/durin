@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api, formatDate, formatMoney } from "../api";
-import { Account, Connection, SyncStatus, Txn, TxnPage } from "../types";
+import DatePresets from "../components/DatePresets";
+import {
+  Account,
+  CategoriesResponse,
+  Category,
+  REFRESHED_EVENT,
+  Txn,
+  TxnPage,
+} from "../types";
 
 type SortField = "posted" | "amount";
 type SortDir = "asc" | "desc";
@@ -9,78 +17,125 @@ const PAGE_SIZE = 50;
 
 export default function TransactionsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [accountId, setAccountId] = useState<string>("");
+  const [categoryId, setCategoryId] = useState<string>(""); // "", "none", or id
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [sort, setSort] = useState<SortField>("posted");
   const [dir, setDir] = useState<SortDir>("desc");
-  const [page, setPage] = useState(1);
 
-  const [data, setData] = useState<TxnPage | null>(null);
+  const [items, setItems] = useState<Txn[]>([]);
+  const [summary, setSummary] = useState<{
+    total: number;
+    net: number;
+    spend: number;
+    income: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState("");
-  const [syncing, setSyncing] = useState(false);
+  const [notice, setNotice] = useState("");
 
-  // Unmount / staleness guards: timers and in-flight fetches must neither
-  // fire after unmount nor overwrite newer results with older ones.
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [batchCategory, setBatchCategory] = useState<string>("none");
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
   const alive = useRef(true);
-  const pollTimer = useRef<number | null>(null);
   const fetchSeq = useRef(0);
+  const itemsLenRef = useRef(0);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const categoriesRef = useRef<Category[]>([]);
+  useEffect(() => {
+    categoriesRef.current = categories;
+  }, [categories]);
+  useEffect(() => {
+    itemsLenRef.current = items.length;
+  }, [items]);
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      if (pollTimer.current !== null) window.clearTimeout(pollTimer.current);
     };
   }, []);
 
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      setDebouncedQ(q);
-      setPage(1);
-    }, 300);
+    const t = window.setTimeout(() => setDebouncedQ(q), 300);
     return () => window.clearTimeout(t);
   }, [q]);
 
-  // Filters reset the page *synchronously* in their handlers (below) rather
-  // than via an effect — an effect-based reset would first fetch with the
-  // new filter but the stale page number, wasting a full server-side query.
+  // If the filtered category was removed, drop the filter instead of leaving
+  // a blank select silently matching nothing.
+  useEffect(() => {
+    if (
+      categoryId &&
+      categoryId !== "none" &&
+      categories.length > 0 &&
+      !categories.some((c) => String(c.id) === categoryId)
+    ) {
+      setCategoryId("");
+    }
+  }, [categories, categoryId]);
 
-  const loadAccounts = useCallback(async () => {
+  const loadMeta = useCallback(async () => {
     try {
       const accts = await api<Account[]>("/api/accounts");
       if (alive.current) setAccounts(accts);
     } catch {
-      // ignore; the table still works without account names in the filter
+      // the table still works without account names
+    }
+    try {
+      const cats = await api<CategoriesResponse>("/api/categories");
+      if (alive.current) setCategories(cats.categories);
+    } catch {
+      // the table still works without the category filter
     }
   }, []);
 
-  const loadTxns = useCallback(async () => {
+  const buildParams = useCallback(
+    (page: number) => {
+      const params = new URLSearchParams({
+        sort,
+        dir,
+        page: String(page),
+        page_size: String(PAGE_SIZE),
+      });
+      if (accountId) params.set("account_id", accountId);
+      if (categoryId) params.set("category", categoryId);
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+      if (debouncedQ) params.set("q", debouncedQ);
+      return params;
+    },
+    [accountId, categoryId, start, end, debouncedQ, sort, dir]
+  );
+
+  const loadFresh = useCallback(async () => {
     const mySeq = ++fetchSeq.current;
     setLoading(true);
-    const params = new URLSearchParams({
-      sort,
-      dir,
-      page: String(page),
-      page_size: String(PAGE_SIZE),
-    });
-    if (accountId) params.set("account_id", accountId);
-    if (start) params.set("start", start);
-    if (end) params.set("end", end);
-    if (debouncedQ) params.set("q", debouncedQ);
     try {
-      const result = await api<TxnPage>(`/api/transactions?${params}`);
+      const result = await api<TxnPage>(`/api/transactions?${buildParams(1)}`);
       if (!alive.current || mySeq !== fetchSeq.current) return;
-      setData(result);
+      setItems(result.items);
+      setSummary({
+        total: result.total,
+        net: result.total_amount,
+        spend: result.total_spend,
+        income: result.total_income,
+      });
+      setHasMore(result.items.length < result.total);
+      setSelected(new Set());
+      setEditingId(null);
       setError("");
-      // If the result set shrank (e.g. after a delete), don't strand the
-      // user past the last page.
-      const lastPage = Math.max(1, Math.ceil(result.total / result.page_size));
-      if (result.items.length === 0 && result.total > 0 && page > lastPage) {
-        setPage(lastPage);
+      // Rows can reference categories this page hasn't seen yet.
+      const known = new Set(categoriesRef.current.map((c) => c.id));
+      if (result.items.some((t) => t.category_id != null && !known.has(t.category_id))) {
+        loadMeta();
       }
     } catch (err) {
       if (!alive.current || mySeq !== fetchSeq.current) return;
@@ -88,89 +143,76 @@ export default function TransactionsPage() {
     } finally {
       if (alive.current && mySeq === fetchSeq.current) setLoading(false);
     }
-  }, [accountId, start, end, debouncedQ, sort, dir, page]);
+  }, [buildParams, loadMeta]);
 
-  // The refresh poll chain outlives individual renders; give it the *latest*
-  // loaders so it never reloads with stale filter values.
-  const loadTxnsRef = useRef(loadTxns);
-  const loadAccountsRef = useRef(loadAccounts);
-  useEffect(() => {
-    loadTxnsRef.current = loadTxns;
-    loadAccountsRef.current = loadAccounts;
-  }, [loadTxns, loadAccounts]);
-
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
-
-  useEffect(() => {
-    loadTxns();
-  }, [loadTxns]);
-
-  const finishRefresh = useCallback(async () => {
-    if (!alive.current) return;
-    setSyncing(false);
-    loadAccountsRef.current();
-    loadTxnsRef.current();
+  const loadMore = useCallback(async () => {
+    if (loadingMore || loading || !hasMore) return;
+    const mySeq = fetchSeq.current;
+    setLoadingMore(true);
     try {
-      const conns = await api<Connection[]>("/api/connections");
-      if (!alive.current) return;
-      const bad = conns.filter(
-        (c) => c.last_sync_status === "error" || c.last_sync_status === "partial"
-      );
-      if (bad.length > 0) {
-        setError(
-          `Sync problem with ${bad.map((c) => c.name).join(", ")} — details in Settings.`
-        );
-      }
+      // Derive the page from how many rows are loaded: after in-place
+      // deletes the server offsets shift, and refetching the boundary page
+      // (deduped below) picks up shifted-in rows instead of skipping them.
+      const next = Math.floor(itemsLenRef.current / PAGE_SIZE) + 1;
+      const result = await api<TxnPage>(`/api/transactions?${buildParams(next)}`);
+      if (!alive.current || mySeq !== fetchSeq.current) return;
+      setItems((prev) => {
+        const seen = new Set(prev.map((t) => t.id));
+        const merged = [...prev, ...result.items.filter((t) => !seen.has(t.id))];
+        // Stop when the server runs out OR a fetch makes no progress (both
+        // can happen when rows shift under us) — otherwise the sentinel
+        // would refetch the same page forever. A top-bar refresh re-syncs.
+        setHasMore(merged.length > prev.length && merged.length < result.total);
+        return merged;
+      });
     } catch {
-      // connection status is best-effort here
+      // transient; the sentinel will retry on the next intersection
+    } finally {
+      if (alive.current) setLoadingMore(false);
     }
+  }, [buildParams, hasMore, loading, loadingMore]);
+
+  const loadMoreRef = useRef(loadMore);
+  const loadFreshRef = useRef(loadFresh);
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+    loadFreshRef.current = loadFresh;
+  }, [loadMore, loadFresh]);
+
+  useEffect(() => {
+    loadMeta();
+  }, [loadMeta]);
+
+  useEffect(() => {
+    loadFresh();
+  }, [loadFresh]);
+
+  // Top-bar refresh finished a sync: reload everything.
+  useEffect(() => {
+    const onRefreshed = () => {
+      loadMeta();
+      loadFreshRef.current();
+    };
+    window.addEventListener(REFRESHED_EVENT, onRefreshed);
+    return () => window.removeEventListener(REFRESHED_EVENT, onRefreshed);
+  }, [loadMeta]);
+
+  // Infinite scroll: a callback ref keeps the observer attached to the
+  // *current* sentinel row, which unmounts and remounts as hasMore flips.
+  useEffect(() => {
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMoreRef.current();
+      },
+      { rootMargin: "600px" }
+    );
+    return () => observerRef.current?.disconnect();
   }, []);
 
-  const pollUntilDone = useCallback(
-    (attempt: number) => {
-      pollTimer.current = window.setTimeout(async () => {
-        if (!alive.current) return;
-        let stillSyncing = false;
-        try {
-          const status = await api<SyncStatus>("/api/sync/status");
-          if (!alive.current) return;
-          stillSyncing = status.syncing;
-          if (stillSyncing && attempt < 150) {
-            pollUntilDone(attempt + 1);
-            return;
-          }
-        } catch {
-          // fall through and refresh anyway
-        }
-        await finishRefresh();
-        if (stillSyncing && alive.current) {
-          setError(
-            "Sync is still running in the background — data will keep updating. Check Settings for progress."
-          );
-        }
-      }, 2000);
-    },
-    [finishRefresh]
-  );
-
-  const forceRefresh = async () => {
-    setSyncing(true);
-    setError("");
-    try {
-      const res = await api<{ total: number }>("/api/sync", { method: "POST", body: "{}" });
-      if (res.total === 0) {
-        setSyncing(false);
-        setError("No SimpleFin connections yet — add one in Settings.");
-        return;
-      }
-      pollUntilDone(0);
-    } catch (err) {
-      setSyncing(false);
-      setError(err instanceof Error ? err.message : "Refresh failed");
-    }
-  };
+  const sentinelRef = useCallback((node: HTMLTableRowElement | null) => {
+    observerRef.current?.disconnect();
+    if (node) observerRef.current?.observe(node);
+  }, []);
 
   const toggleSort = (field: SortField) => {
     if (sort === field) {
@@ -179,7 +221,6 @@ export default function TransactionsPage() {
       setSort(field);
       setDir(field === "posted" ? "desc" : "asc");
     }
-    setPage(1);
   };
 
   const sortIndicator = (field: SortField) =>
@@ -187,41 +228,114 @@ export default function TransactionsPage() {
 
   const clearFilters = () => {
     setAccountId("");
+    setCategoryId("");
     setStart("");
     setEnd("");
     setQ("");
-    setPage(1);
   };
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
-  const hasFilters = accountId || start || end || q;
+  const hasFilters = accountId || categoryId || start || end || q;
+  const categoriesById = new Map(categories.map((c) => [c.id, c]));
 
-  // Net total only makes sense in a single currency: use the filtered
-  // account's currency, or the common one when all accounts agree.
-  const selectedAccount = accounts.find((a) => String(a.id) === accountId);
-  const currencies = new Set(accounts.map((a) => a.currency));
-  const netCurrency =
-    selectedAccount?.currency ?? (currencies.size <= 1 ? accounts[0]?.currency : null);
+  // Summary currency: the filtered account's, else the common one, else USD.
+  const filteredAccount = accounts.find((a) => String(a.id) === accountId);
+  const uniqueCurrencies = new Set(accounts.map((a) => a.currency));
+  const summaryCurrency =
+    filteredAccount?.currency ??
+    (uniqueCurrencies.size === 1 && accounts.length > 0 ? accounts[0].currency : "USD");
+
+  const toggleSelected = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allLoadedSelected = items.length > 0 && items.every((t) => selected.has(t.id));
+  const toggleSelectAll = () => {
+    setSelected(allLoadedSelected ? new Set() : new Set(items.map((t) => t.id)));
+  };
+
+  // Remove rows in place (batch delete / row delete) so a deep scroll
+  // position survives; the summary is adjusted exactly from the removed
+  // amounts instead of refetching.
+  const removeRows = useCallback((ids: Set<number>) => {
+    setItems((prev) => {
+      const removed = prev.filter((t) => ids.has(t.id));
+      setSummary((s) =>
+        s
+          ? {
+              total: s.total - removed.length,
+              net: s.net - removed.reduce((a, t) => a + t.amount, 0),
+              spend:
+                s.spend - removed.reduce((a, t) => a + (t.amount < 0 ? -t.amount : 0), 0),
+              income:
+                s.income - removed.reduce((a, t) => a + (t.amount > 0 ? t.amount : 0), 0),
+            }
+          : s
+      );
+      return prev.filter((t) => !ids.has(t.id));
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, []);
+
+  const runBatch = async (action: "delete" | "categorize") => {
+    if (selected.size === 0) return;
+    if (
+      action === "delete" &&
+      !window.confirm(`Delete ${selected.size} transaction${selected.size === 1 ? "" : "s"}?`)
+    ) {
+      return;
+    }
+    setBatchBusy(true);
+    setError("");
+    try {
+      const ids = new Set(selected);
+      const body: Record<string, unknown> = { ids: [...ids], action };
+      const newCat = batchCategory === "none" ? null : Number(batchCategory);
+      if (action === "categorize") {
+        body.category_id = newCat;
+      }
+      const res = await api<{ affected: number }>("/api/transactions/batch", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      if (action === "delete") {
+        removeRows(ids);
+        setNotice(`Deleted ${res.affected} transaction${res.affected === 1 ? "" : "s"}.`);
+      } else {
+        setItems((prev) =>
+          prev.map((t) =>
+            ids.has(t.id) ? { ...t, category_id: newCat, category_manual: true } : t
+          )
+        );
+        setSelected(new Set());
+        setNotice(`Categorized ${res.affected} transaction${res.affected === 1 ? "" : "s"}.`);
+      }
+      loadMeta();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Batch action failed");
+    } finally {
+      setBatchBusy(false);
+    }
+  };
 
   return (
     <div className="page">
       <div className="page-head">
         <h2>Transactions</h2>
-        <button className="btn btn-primary" onClick={forceRefresh} disabled={syncing}>
-          {syncing ? "Syncing…" : "Refresh from banks"}
-        </button>
       </div>
 
       <div className="filters">
         <label>
           Account
-          <select
-            value={accountId}
-            onChange={(e) => {
-              setAccountId(e.target.value);
-              setPage(1);
-            }}
-          >
+          <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             <option value="">All accounts</option>
             {accounts.map((a) => (
               <option key={a.id} value={String(a.id)}>
@@ -231,27 +345,31 @@ export default function TransactionsPage() {
           </select>
         </label>
         <label>
+          Category
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">All categories</option>
+            <option value="none">Uncategorized</option>
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.emoji ? `${c.emoji} ${c.name}` : c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           From
-          <input
-            type="date"
-            value={start}
-            onChange={(e) => {
-              setStart(e.target.value);
-              setPage(1);
-            }}
-          />
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
         </label>
         <label>
           To
-          <input
-            type="date"
-            value={end}
-            onChange={(e) => {
-              setEnd(e.target.value);
-              setPage(1);
-            }}
-          />
+          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
         </label>
+        <DatePresets
+          onSelect={(s, e) => {
+            setStart(s);
+            setEnd(e);
+          }}
+        />
         <label className="grow">
           Search
           <input
@@ -269,98 +387,286 @@ export default function TransactionsPage() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {notice && <div className="alert alert-ok">{notice}</div>}
 
-      {data && (
+      {summary && (
         <div className="summary muted">
-          {data.total} transaction{data.total === 1 ? "" : "s"}
-          {hasFilters ? " (filtered)" : ""}
-          {netCurrency && (
-            <>
-              {" "}
-              · net{" "}
-              <strong className={data.total_amount < 0 ? "neg" : "pos"}>
-                {formatMoney(String(data.total_amount), netCurrency)}
-              </strong>
-            </>
-          )}
+          {summary.total} transaction{summary.total === 1 ? "" : "s"}
+          {hasFilters ? " (filtered)" : ""} · spent{" "}
+          <strong className="neg">{formatMoney(summary.spend, summaryCurrency)}</strong> · income{" "}
+          <strong className="pos">{formatMoney(summary.income, summaryCurrency)}</strong> · net{" "}
+          <strong className={summary.net < 0 ? "neg" : "pos"}>
+            {formatMoney(summary.net, summaryCurrency)}
+          </strong>
+        </div>
+      )}
+
+      {selected.size > 0 && (
+        <div className="batch-bar">
+          <span>
+            {selected.size} selected
+          </span>
+          <select value={batchCategory} onChange={(e) => setBatchCategory(e.target.value)}>
+            <option value="none">Uncategorized</option>
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.emoji ? `${c.emoji} ${c.name}` : c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn btn-primary"
+            disabled={batchBusy}
+            onClick={() => runBatch("categorize")}
+          >
+            Set category
+          </button>
+          <button className="btn btn-danger" disabled={batchBusy} onClick={() => runBatch("delete")}>
+            Delete
+          </button>
+          <button className="btn btn-quiet" onClick={() => setSelected(new Set())}>
+            Clear selection
+          </button>
         </div>
       )}
 
       <table className="txn-table">
         <thead>
           <tr>
+            <th className="check-col">
+              <input
+                type="checkbox"
+                checked={allLoadedSelected}
+                onChange={toggleSelectAll}
+                title="Select all loaded"
+              />
+            </th>
             <th className="sortable" onClick={() => toggleSort("posted")}>
               Date{sortIndicator("posted")}
             </th>
             <th>Account</th>
             <th>Description</th>
+            <th>Category</th>
             <th className="sortable num" onClick={() => toggleSort("amount")}>
               Amount{sortIndicator("amount")}
             </th>
+            <th className="edit-col"></th>
           </tr>
         </thead>
         <tbody>
-          {loading && !data ? (
+          {loading && items.length === 0 ? (
             <tr>
-              <td colSpan={4} className="empty">
+              <td colSpan={7} className="empty">
                 Loading…
               </td>
             </tr>
-          ) : data && data.items.length === 0 ? (
+          ) : items.length === 0 ? (
             <tr>
-              <td colSpan={4} className="empty">
+              <td colSpan={7} className="empty">
                 {hasFilters
                   ? "No transactions match these filters."
                   : "No transactions yet. Add a SimpleFin connection in Settings, then refresh."}
               </td>
             </tr>
           ) : (
-            data?.items.map((t: Txn) => (
-              <tr key={t.id} className={t.pending ? "pending-row" : ""}>
-                <td className="nowrap">{formatDate(t.posted)}</td>
-                <td className="nowrap">
-                  <span className="acct-name">{t.account_name}</span>
-                  {t.org_name && <span className="muted small"> · {t.org_name}</span>}
-                </td>
-                <td>
-                  {t.description || t.payee || "(no description)"}
-                  {t.pending && <span className="badge">pending</span>}
-                  {(t.payee || t.memo) && (
-                    <div className="muted small">
-                      {[t.payee, t.memo].filter(Boolean).join(" · ")}
-                    </div>
-                  )}
-                </td>
-                <td className={`num nowrap ${t.amount < 0 ? "neg" : "pos"}`}>
-                  {formatMoney(t.amount_str, t.currency)}
-                </td>
-              </tr>
-            ))
+            items.map((t: Txn) =>
+              editingId === t.id ? (
+                <EditRow
+                  key={t.id}
+                  txn={t}
+                  categories={categories}
+                  onCancel={() => setEditingId(null)}
+                  onSaved={(updated) => {
+                    setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                    setEditingId(null);
+                    loadMeta();
+                  }}
+                  onDeleted={() => {
+                    removeRows(new Set([t.id]));
+                    setEditingId(null);
+                    setNotice("Transaction deleted.");
+                    loadMeta();
+                  }}
+                />
+              ) : (
+                <tr key={t.id} className={t.pending ? "pending-row" : ""}>
+                  <td className="check-col">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(t.id)}
+                      onChange={() => toggleSelected(t.id)}
+                    />
+                  </td>
+                  <td className="nowrap">{formatDate(t.posted)}</td>
+                  <td className="nowrap">
+                    <span className="acct-name">{t.account_name}</span>
+                    {t.org_name && <span className="muted small"> · {t.org_name}</span>}
+                  </td>
+                  <td>
+                    {t.description || t.payee || "(no description)"}
+                    {t.pending && <span className="badge">pending</span>}
+                    {t.edited && <span className="badge">edited</span>}
+                    {(t.payee || t.memo) && (
+                      <div className="muted small">
+                        {[t.payee, t.memo].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                  </td>
+                  <td className="nowrap">
+                    {(() => {
+                      const cat =
+                        t.category_id != null ? categoriesById.get(t.category_id) : undefined;
+                      return cat ? (
+                        <span className="cat-chip" title={t.category_manual ? "Set by hand" : ""}>
+                          <span className="cat-dot" style={{ background: cat.color }} />
+                          {cat.emoji ? `${cat.emoji} ` : ""}
+                          {cat.name}
+                          {t.category_manual && <span className="manual-mark">✎</span>}
+                        </span>
+                      ) : (
+                        <span className="muted small">—</span>
+                      );
+                    })()}
+                  </td>
+                  <td className={`num nowrap ${t.amount < 0 ? "neg" : "pos"}`}>
+                    {formatMoney(t.amount_str, t.currency)}
+                  </td>
+                  <td className="edit-col">
+                    <button
+                      className="btn btn-quiet btn-small"
+                      onClick={() => setEditingId(t.id)}
+                      title="Edit"
+                    >
+                      ✎
+                    </button>
+                  </td>
+                </tr>
+              )
+            )
+          )}
+          {hasMore && (
+            <tr ref={sentinelRef}>
+              <td colSpan={7} className="empty small">
+                {loadingMore ? "Loading more…" : "Scroll for more"}
+              </td>
+            </tr>
           )}
         </tbody>
       </table>
-
-      {data && data.total > PAGE_SIZE && (
-        <div className="pager">
-          <button
-            className="btn btn-quiet"
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-          >
-            ← Prev
-          </button>
-          <span className="muted">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            className="btn btn-quiet"
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Next →
-          </button>
-        </div>
-      )}
     </div>
+  );
+}
+
+function EditRow({
+  txn,
+  categories,
+  onCancel,
+  onSaved,
+  onDeleted,
+}: {
+  txn: Txn;
+  categories: Category[];
+  onCancel: () => void;
+  onSaved: (t: Txn) => void;
+  onDeleted: () => void;
+}) {
+  const [description, setDescription] = useState(txn.description);
+  const [payee, setPayee] = useState(txn.payee);
+  const [memo, setMemo] = useState(txn.memo);
+  const [categoryId, setCategoryId] = useState(
+    txn.category_id != null ? String(txn.category_id) : "none"
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const body: Record<string, unknown> = {};
+      if (description !== txn.description) body.description = description;
+      if (payee !== txn.payee) body.payee = payee;
+      if (memo !== txn.memo) body.memo = memo;
+      const newCat = categoryId === "none" ? null : Number(categoryId);
+      if (newCat !== txn.category_id) body.category_id = newCat;
+      if (Object.keys(body).length === 0) {
+        onCancel();
+        return;
+      }
+      const updated = await api<Txn>(`/api/transactions/${txn.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      onSaved(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm("Delete this transaction? It will not come back on future syncs.")) return;
+    setBusy(true);
+    try {
+      await api("/api/transactions/batch", {
+        method: "POST",
+        body: JSON.stringify({ ids: [txn.id], action: "delete" }),
+      });
+      onDeleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <tr className="edit-row">
+      <td colSpan={7}>
+        <form onSubmit={save} className="edit-form">
+          <div className="edit-fields">
+            <label>
+              Description
+              <input value={description} onChange={(e) => setDescription(e.target.value)} />
+            </label>
+            <label>
+              Payee
+              <input value={payee} onChange={(e) => setPayee(e.target.value)} />
+            </label>
+            <label>
+              Memo
+              <input value={memo} onChange={(e) => setMemo(e.target.value)} />
+            </label>
+            <label>
+              Category
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="none">Uncategorized</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.emoji ? `${c.emoji} ${c.name}` : c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="edit-actions">
+            <span className="muted small">
+              {formatDate(txn.posted)} · {formatMoney(txn.amount_str, txn.currency)}
+            </span>
+            <div className="spacer" />
+            <button type="button" className="btn btn-danger" disabled={busy} onClick={remove}>
+              Delete
+            </button>
+            <button type="button" className="btn btn-quiet" disabled={busy} onClick={onCancel}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy}>
+              {busy ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
+      </td>
+    </tr>
   );
 }

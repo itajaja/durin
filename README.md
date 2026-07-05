@@ -5,10 +5,15 @@ accounts and transactions from your banks via [SimpleFin](https://www.simplefin.
 stores them in SQLite, and shows them in a filterable, sortable table.
 
 - **Backend:** Python (FastAPI) + SQLite. Background sync every 6 hours plus a
-  force-refresh button.
-- **Frontend:** React + TypeScript (Vite). One transactions table with filters
-  (account, date range, text search) and sorting (date, amount), plus a
-  settings page for SimpleFin connections.
+  refresh button in the top bar.
+- **Frontend:** React + TypeScript (Vite), light and dark themes. An
+  infinite-scrolling transactions table with filters (account, category, date
+  range with quick presets, text search), sorting, spend/income/net summary,
+  inline editing, and batch actions; a Spending page with a stacked-bar chart
+  by category (day/week/month/year); a Categories page; and a settings page
+  for SimpleFin connections.
+- **Categories:** per-user budget categories with substring matching rules,
+  managed on the Categories page. See below.
 - **Auth:** Google sign-in with an email allowlist; multiple users each see
   only their own data. A local dev login is available before Google is set up.
 
@@ -47,6 +52,35 @@ https://demo:demo@beta-bridge.simplefin.org/simplefin
 Durin exchanges the setup token for a long-lived access URL and stores it in
 the local SQLite database (`data/durin.db`). Anyone with that file can read
 your transactions, so treat it like a credentials file.
+
+## Categories & the Spending page
+
+Everything starts uncategorized, and a new account starts with zero
+categories. On the **Categories** page you create categories (name, emoji,
+color, and a "not spending" flag for transfers/card payments) and attach
+**substrings** to them. A transaction whose description, payee, or memo
+contains a substring (case-insensitive, first match wins by creation order)
+is filed in that category. A transaction belongs to at most one category.
+
+- **Adding a substring** applies it to *uncategorized* transactions only — a
+  live preview shows exactly which ones will match before you commit.
+- **Removing a substring** never moves transactions.
+- **Recategorize** (while editing a category) re-derives just that category:
+  transactions it holds that no longer match any of its substrings go back to
+  uncategorized, and uncategorized matches are pulled in.
+- **Manual assignments win**: categorizing a transaction by hand (row editor
+  or batch bar) marks it manual, and no rule pass ever touches it again.
+- Deleting a category frees its transactions back to uncategorized.
+
+**Editing & deleting transactions:** the pencil on each row opens an inline
+editor (description, payee, memo, category — edits survive future syncs);
+row checkboxes plus the batch bar delete or categorize many at once. Deleted
+transactions stay gone even though the bank keeps reporting them.
+
+The **Spending** page plots expenses (negative amounts, shown as positive) as
+a stacked bar chart: pick the categories, a date range (with quick presets),
+and a grouping (day / week / month / year). "Not spending" categories never
+count there.
 
 ## Google sign-in
 

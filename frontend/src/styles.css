@@ -8,7 +8,25 @@
   --accent-dark: #2258c4;
   --red: #b3261e;
   --green: #1a7f37;
+  --hover: #fafaf7;
+  --shadow: rgba(0, 0, 0, 0.08);
   font-size: 15px;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #191a17;
+  --fg: #e8e6de;
+  --muted: #9b998e;
+  --card: #22231f;
+  --border: #35362f;
+  --accent: #5a8ff0;
+  --accent-dark: #7ca5f3;
+  --red: #e08479;
+  --green: #66bb7f;
+  --hover: #282923;
+  --shadow: rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
 }
 
 * {
@@ -196,7 +214,7 @@ textarea:focus {
   display: block;
   text-align: center;
   background: var(--fg);
-  color: #fff;
+  color: var(--bg);
   border-color: var(--fg);
   padding: 0.6rem;
 }
@@ -230,7 +248,7 @@ th {
 }
 
 .txn-table tbody tr:hover {
-  background: #fafaf7;
+  background: var(--hover);
 }
 
 th.sortable {
@@ -308,6 +326,11 @@ th.sortable:hover {
   border-color: #9a6700;
 }
 
+:root[data-theme="dark"] .badge-amber {
+  color: #d9a94a;
+  border-color: #d9a94a;
+}
+
 .badge-blue {
   color: var(--accent);
   border-color: var(--accent);
@@ -325,14 +348,14 @@ th.sortable:hover {
 }
 
 .alert-error {
-  background: #fdeceb;
-  border-color: #f5c6c3;
+  background: color-mix(in srgb, var(--red) 10%, var(--card));
+  border-color: color-mix(in srgb, var(--red) 35%, var(--card));
   color: var(--red);
 }
 
 .alert-ok {
-  background: #eaf6ee;
-  border-color: #c4e3cf;
+  background: color-mix(in srgb, var(--green) 10%, var(--card));
+  border-color: color-mix(in srgb, var(--green) 35%, var(--card));
   color: var(--green);
 }
 
@@ -427,6 +450,145 @@ th.sortable:hover {
   color: var(--muted);
 }
 
+/* ---- categories ---- */
+.cat-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.cat-chip-boxed {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  background: var(--bg);
+}
+
+.cat-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cat-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  padding: 0.85rem 1.25rem;
+}
+
+.cat-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.cat-check input {
+  accent-color: var(--accent);
+}
+
+/* ---- spending chart ---- */
+.chart-wrap {
+  padding-bottom: 0.5rem;
+}
+
+.chart-scroll {
+  overflow-x: auto;
+}
+
+/* The tooltip is positioned as a percentage of the chart CONTENT width, so
+   it must anchor to this inner wrapper (which matches the SVG size and
+   scrolls with it), not to the scroll viewport. */
+.chart-inner {
+  position: relative;
+  min-width: 640px;
+}
+
+.spend-chart {
+  width: 100%;
+  display: block;
+}
+
+.grid-line {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.axis-line {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.axis-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.hover-band {
+  fill: var(--border);
+  opacity: 0.35;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px var(--shadow);
+  padding: 0.55rem 0.75rem;
+  pointer-events: none;
+  min-width: 190px;
+  z-index: 5;
+  font-size: 0.84rem;
+}
+
+.tt-title {
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.tt-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.08rem 0;
+}
+
+.tt-name {
+  color: var(--muted);
+  flex: 1;
+}
+
+.tt-val {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tt-total {
+  border-top: 1px solid var(--border);
+  margin-top: 0.3rem;
+  padding-top: 0.35rem;
+  font-weight: 600;
+}
+
+.tt-total .tt-name {
+  color: var(--fg);
+}
+
 code {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -434,4 +596,197 @@ code {
   padding: 0.1rem 0.3rem;
   font-size: 0.85em;
   word-break: break-all;
+}
+
+/* ---- top bar extras ---- */
+.theme-toggle {
+  font-size: 1rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.sync-note {
+  max-width: 1100px;
+  margin: 0.5rem auto 0;
+  padding: 0.5rem 1.25rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ---- batch bar & selection ---- */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  margin-bottom: 0.75rem;
+  position: sticky;
+  top: 3.2rem;
+  z-index: 5;
+}
+
+.check-col {
+  width: 2rem;
+}
+
+.edit-col {
+  width: 2.2rem;
+  text-align: right;
+}
+
+.btn-small {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.manual-mark {
+  color: var(--muted);
+  font-size: 0.75em;
+  margin-left: 0.25rem;
+}
+
+/* ---- inline transaction editor ---- */
+.edit-row td {
+  background: var(--hover);
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+}
+
+.edit-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.edit-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex: 1;
+  min-width: 160px;
+}
+
+.edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ---- categories page ---- */
+.cat-form-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: end;
+  margin-bottom: 0.75rem;
+}
+
+.cat-form-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.cat-form-fields .check-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  color: var(--fg);
+  padding-bottom: 0.4rem;
+}
+
+.emoji-input {
+  width: 4.5rem;
+}
+
+input[type="color"] {
+  width: 3rem;
+  height: 2.2rem;
+  padding: 0.15rem;
+  cursor: pointer;
+}
+
+.cat-card {
+  margin-bottom: 1rem;
+}
+
+.cat-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rule-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.8rem 0 0.6rem;
+}
+
+.rule-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.35rem 0.2rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+.rule-x {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+}
+
+.rule-x:hover {
+  color: var(--red);
+}
+
+.rule-add {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 420px;
+}
+
+.rule-add input {
+  flex: 1;
+}
+
+.preview-box {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.preview-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.preview-list li {
+  padding: 0.08rem 0;
 }

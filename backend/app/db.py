@@ -28,6 +28,53 @@ def init_db() -> None:
     from . import models  # noqa: F401  (register mappings)
 
     models.Base.metadata.create_all(engine)
+    _migrate(engine)
+
+
+def _migrate(eng) -> None:
+    """Additive migrations for pre-existing databases (create_all only
+    creates missing tables, it never alters existing ones)."""
+    from . import models
+
+    with eng.connect() as conn:
+        cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(transactions)")]
+        if "category_id" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE transactions ADD COLUMN category_id INTEGER "
+                "REFERENCES categories(id) ON DELETE SET NULL"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_transactions_category_id "
+                "ON transactions (category_id)"
+            )
+        for flag in ("category_manual", "deleted", "edited"):
+            if flag not in cols:
+                conn.exec_driver_sql(
+                    f"ALTER TABLE transactions ADD COLUMN {flag} BOOLEAN DEFAULT 0"
+                )
+        conn.commit()
+
+        # Categories became per-user (they were briefly global, sourced from
+        # a script). There is no meaningful owner to migrate the old global
+        # rows to, so rebuild the table; transactions revert to uncategorized.
+        cat_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(categories)")]
+        if cat_cols and "user_id" not in cat_cols:
+            conn.exec_driver_sql("UPDATE transactions SET category_id = NULL")
+            conn.exec_driver_sql("DROP TABLE categories")
+            conn.commit()
+            models.Base.metadata.create_all(eng)
+
+        # Case-insensitive uniqueness, enforced at the DB so concurrent
+        # creates can't slip case-variant duplicates past the API checks.
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_categories_user_lower_name "
+            "ON categories (user_id, lower(name))"
+        )
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_category_rules_lower "
+            "ON category_rules (category_id, lower(substring))"
+        )
+        conn.commit()
 
 
 def get_db():

@@ -1,15 +1,39 @@
-from datetime import datetime, timedelta
+import re
+from datetime import date, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy import case, func, or_
+from sqlalchemy.orm import Session, selectinload
 
-from . import sync
+from . import categorize, sync
 from .db import get_db
 from .auth import get_current_user
-from .models import Account, Connection, Transaction, User, now_ts
+from .models import (
+    Account,
+    Category,
+    CategoryRule,
+    Connection,
+    Transaction,
+    User,
+    now_ts,
+)
 from .simplefin import SimpleFinError, claim_setup_token, fetch_accounts
+
+UNCATEGORIZED_COLOR = "#9b998e"
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _clean_color(raw: str, fallback: str) -> str:
+    color = raw.strip()
+    if not color:
+        return fallback
+    if not _COLOR_RE.match(color):
+        raise HTTPException(
+            status_code=400, detail="Color must be a #rrggbb hex value"
+        )
+    return color
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -176,6 +200,246 @@ def list_accounts(user: User = Depends(get_current_user), db: Session = Depends(
     ]
 
 
+def _category_json(c: Category, txn_count: int) -> dict:
+    return {
+        "id": c.id,
+        "name": c.name,
+        "emoji": c.emoji,
+        "color": c.color,
+        "is_transaction": c.is_transaction,
+        "txn_count": txn_count,
+        "rules": [{"id": r.id, "substring": r.substring} for r in c.rules],
+    }
+
+
+def _get_own_category(db: Session, user: User, category_id: int) -> Category:
+    cat = db.get(Category, category_id)
+    if cat is None or cat.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return cat
+
+
+@router.get("/categories")
+def list_categories(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    counts = dict(
+        db.query(Transaction.category_id, func.count(Transaction.id))
+        .filter(Transaction.user_id == user.id, Transaction.deleted.is_(False))
+        .group_by(Transaction.category_id)
+        .all()
+    )
+    cats = (
+        db.query(Category)
+        .options(selectinload(Category.rules))
+        .filter(Category.user_id == user.id)
+        .order_by(Category.name)
+        .all()
+    )
+    return {
+        "categories": [_category_json(c, counts.get(c.id, 0)) for c in cats],
+        "uncategorized_count": counts.get(None, 0),
+    }
+
+
+class CategoryBody(BaseModel):
+    name: str
+    emoji: str = ""
+    color: str = "#8a8984"
+    is_transaction: bool = False
+
+
+@router.post("/categories")
+def create_category(
+    body: CategoryBody,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Category name is required")
+    dup = (
+        db.query(Category)
+        .filter(Category.user_id == user.id, func.lower(Category.name) == name.lower())
+        .one_or_none()
+    )
+    if dup is not None:
+        raise HTTPException(status_code=409, detail=f"Category {name!r} already exists")
+    cat = Category(
+        user_id=user.id,
+        name=name,
+        emoji=body.emoji.strip()[:16],
+        color=_clean_color(body.color, "#8a8984"),
+        is_transaction=body.is_transaction,
+    )
+    db.add(cat)
+    db.commit()
+    return _category_json(cat, 0)
+
+
+class CategoryPatch(BaseModel):
+    name: str | None = None
+    emoji: str | None = None
+    color: str | None = None
+    is_transaction: bool | None = None
+
+
+@router.patch("/categories/{category_id}")
+def update_category(
+    category_id: int,
+    body: CategoryPatch,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cat = _get_own_category(db, user, category_id)
+    if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Category name cannot be empty")
+        dup = (
+            db.query(Category)
+            .filter(
+                Category.user_id == user.id,
+                func.lower(Category.name) == name.lower(),
+                Category.id != cat.id,
+            )
+            .one_or_none()
+        )
+        if dup is not None:
+            raise HTTPException(status_code=409, detail=f"Category {name!r} already exists")
+        cat.name = name
+    if body.emoji is not None:
+        cat.emoji = body.emoji.strip()[:16]
+    if body.color is not None:
+        cat.color = _clean_color(body.color, cat.color)
+    if body.is_transaction is not None:
+        cat.is_transaction = body.is_transaction
+    db.commit()
+    count = (
+        db.query(func.count(Transaction.id))
+        .filter(Transaction.category_id == cat.id, Transaction.deleted.is_(False))
+        .scalar()
+    )
+    return _category_json(cat, count or 0)
+
+
+@router.delete("/categories/{category_id}")
+def delete_category(
+    category_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cat = _get_own_category(db, user, category_id)
+    # Rows manually assigned here must go back to full automatic handling —
+    # a lingering category_manual flag would silently exempt them from every
+    # future rule pass with no visible reason.
+    db.query(Transaction).filter(Transaction.category_id == cat.id).update(
+        {Transaction.category_manual: False}, synchronize_session=False
+    )
+    # ON DELETE SET NULL frees this category's transactions back to
+    # uncategorized; ON DELETE CASCADE removes its rules.
+    db.query(Category).filter(Category.id == cat.id).delete(synchronize_session=False)
+    db.commit()
+    return {"ok": True}
+
+
+class RuleBody(BaseModel):
+    substring: str
+
+
+@router.post("/categories/{category_id}/rules")
+def add_rule(
+    category_id: int,
+    body: RuleBody,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cat = _get_own_category(db, user, category_id)
+    substring = body.substring.strip()
+    if not substring:
+        raise HTTPException(status_code=400, detail="Substring cannot be empty")
+    dup = any(r.substring.lower() == substring.lower() for r in cat.rules)
+    if dup:
+        raise HTTPException(status_code=409, detail=f"{substring!r} is already a rule here")
+    rule = CategoryRule(category_id=cat.id, substring=substring)
+    db.add(rule)
+    db.commit()
+    # Adding a substring applies to uncategorized transactions only. Report
+    # how many landed in THIS category (the sweep can also file rows under
+    # other categories whose older rules match rows freed by past removals).
+    def _count() -> int:
+        return (
+            db.query(func.count(Transaction.id))
+            .filter(Transaction.category_id == cat.id, Transaction.deleted.is_(False))
+            .scalar()
+            or 0
+        )
+
+    before = _count()
+    categorize.categorize_uncategorized(db, user.id)
+    return {
+        "rule": {"id": rule.id, "substring": rule.substring},
+        "categorized": _count() - before,
+    }
+
+
+@router.delete("/categories/{category_id}/rules/{rule_id}")
+def delete_rule(
+    category_id: int,
+    rule_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cat = _get_own_category(db, user, category_id)
+    rule = db.get(CategoryRule, rule_id)
+    if rule is None or rule.category_id != cat.id:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    # Removing a substring deliberately recategorizes nothing.
+    db.delete(rule)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/categories/{category_id}/preview")
+def preview_rule(
+    category_id: int,
+    substring: str = Query(default=""),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cat = _get_own_category(db, user, category_id)
+    count, sample = categorize.preview_rule(db, user.id, cat.id, substring)
+    accounts_by_id = {
+        a.id: a for a in db.query(Account).filter(Account.user_id == user.id)
+    }
+    return {
+        "count": count,
+        "sample": [
+            {
+                "id": t.id,
+                "posted": t.posted,
+                "description": t.description or t.payee or "(no description)",
+                "amount_str": t.amount_str,
+                "currency": (
+                    accounts_by_id[t.account_id].currency
+                    if t.account_id in accounts_by_id
+                    else "USD"
+                ),
+            }
+            for t in sample
+        ],
+    }
+
+
+@router.post("/categories/{category_id}/recategorize")
+def recategorize_category(
+    category_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cat = _get_own_category(db, user, category_id)
+    result = categorize.recategorize_category(db, user.id, cat)
+    return {"ok": True, **result}
+
+
 def _parse_date(value: str, end_of_day: bool) -> int:
     try:
         dt = datetime.strptime(value, "%Y-%m-%d")
@@ -193,6 +457,7 @@ def list_transactions(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     account_id: int | None = Query(default=None),
+    category: str = Query(default=""),  # "", "none", or a category id
     start: str = Query(default=""),
     end: str = Query(default=""),
     q: str = Query(default=""),
@@ -201,9 +466,18 @@ def list_transactions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=500),
 ):
-    query = db.query(Transaction).filter(Transaction.user_id == user.id)
+    query = db.query(Transaction).filter(
+        Transaction.user_id == user.id, Transaction.deleted.is_(False)
+    )
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
+    if category == "none":
+        query = query.filter(Transaction.category_id.is_(None))
+    elif category:
+        try:
+            query = query.filter(Transaction.category_id == int(category))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="category must be an id or 'none'")
     if start:
         query = query.filter(Transaction.posted >= _parse_date(start, end_of_day=False))
     if end:
@@ -220,8 +494,15 @@ def list_transactions(
             )
         )
 
-    total, total_amount = query.with_entities(
-        func.count(), func.coalesce(func.sum(Transaction.amount), 0.0)
+    total, total_amount, total_spend, total_income = query.with_entities(
+        func.count(),
+        func.coalesce(func.sum(Transaction.amount), 0.0),
+        func.coalesce(
+            func.sum(case((Transaction.amount < 0, -Transaction.amount), else_=0.0)), 0.0
+        ),
+        func.coalesce(
+            func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0.0)), 0.0
+        ),
     ).one()
 
     sort_col = Transaction.posted if sort == "posted" else Transaction.amount
@@ -256,12 +537,262 @@ def list_transactions(
                 "payee": t.payee,
                 "memo": t.memo,
                 "pending": t.pending,
+                "category_id": t.category_id,
+                "category_manual": t.category_manual,
+                "edited": t.edited,
             }
         )
     return {
         "items": items,
         "total": total,
         "total_amount": float(total_amount or 0.0),
+        "total_spend": float(total_spend or 0.0),
+        "total_income": float(total_income or 0.0),
         "page": page,
         "page_size": page_size,
+    }
+
+
+def _txn_json(t: Transaction, acct: Account | None) -> dict:
+    return {
+        "id": t.id,
+        "account_id": t.account_id,
+        "account_name": acct.name if acct else "",
+        "org_name": acct.org_name if acct else "",
+        "currency": acct.currency if acct else "USD",
+        "posted": t.posted,
+        "amount": t.amount,
+        "amount_str": t.amount_str,
+        "description": t.description,
+        "payee": t.payee,
+        "memo": t.memo,
+        "pending": t.pending,
+        "category_id": t.category_id,
+        "category_manual": t.category_manual,
+        "edited": t.edited,
+    }
+
+
+class TxnPatch(BaseModel):
+    description: str | None = None
+    payee: str | None = None
+    memo: str | None = None
+    category_id: int | None = None
+
+
+@router.patch("/transactions/{txn_id}")
+def update_transaction(
+    txn_id: int,
+    body: TxnPatch,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    txn = db.get(Transaction, txn_id)
+    if txn is None or txn.user_id != user.id or txn.deleted:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    provided = body.model_fields_set
+    if "description" in provided and body.description is not None:
+        txn.description = body.description.strip()
+        txn.edited = True
+    if "payee" in provided and body.payee is not None:
+        txn.payee = body.payee.strip()
+        txn.edited = True
+    if "memo" in provided and body.memo is not None:
+        txn.memo = body.memo.strip()
+        txn.edited = True
+    if "category_id" in provided:
+        if body.category_id is not None:
+            _get_own_category(db, user, body.category_id)
+        txn.category_id = body.category_id
+        # Hand-picked (including hand-picked "uncategorized"): rule passes
+        # must leave it alone from now on.
+        txn.category_manual = True
+    db.commit()
+    acct = db.get(Account, txn.account_id)
+    return _txn_json(txn, acct)
+
+
+class TxnBatch(BaseModel):
+    ids: list[int]
+    action: Literal["delete", "categorize"]
+    category_id: int | None = None
+
+
+@router.post("/transactions/batch")
+def batch_transactions(
+    body: TxnBatch,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="No transactions selected")
+    if len(body.ids) > 10000:
+        raise HTTPException(status_code=400, detail="Too many transactions in one batch")
+    query = db.query(Transaction).filter(
+        Transaction.user_id == user.id,
+        Transaction.id.in_(body.ids),
+        Transaction.deleted.is_(False),
+    )
+    if body.action == "delete":
+        affected = query.update({Transaction.deleted: True}, synchronize_session=False)
+    else:
+        if body.category_id is not None:
+            _get_own_category(db, user, body.category_id)
+        affected = query.update(
+            {Transaction.category_id: body.category_id, Transaction.category_manual: True},
+            synchronize_session=False,
+        )
+    db.commit()
+    return {"ok": True, "affected": affected}
+
+
+def _bucket_key(d: date, granularity: str) -> str:
+    if granularity == "year":
+        return str(d.year)
+    if granularity == "month":
+        return d.strftime("%Y-%m")
+    if granularity == "week":
+        return (d - timedelta(days=d.weekday())).isoformat()  # Monday of the week
+    return d.isoformat()
+
+
+def _bucket_range(start: date, end: date, granularity: str) -> list[str]:
+    buckets: list[str] = []
+    if granularity == "year":
+        return [str(y) for y in range(start.year, end.year + 1)]
+    if granularity == "month":
+        cur = start.replace(day=1)
+        while cur <= end:
+            buckets.append(cur.strftime("%Y-%m"))
+            cur = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
+    else:
+        step = 7 if granularity == "week" else 1
+        cur = start - timedelta(days=start.weekday()) if granularity == "week" else start
+        while cur <= end:
+            buckets.append(cur.isoformat())
+            cur += timedelta(days=step)
+    return buckets
+
+
+def _parse_iso_date(value: str) -> date:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid date: {value} (expected YYYY-MM-DD)")
+
+
+@router.get("/spending")
+def spending(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    start: str = Query(default=""),
+    end: str = Query(default=""),
+    granularity: str = Query(default="month", pattern="^(day|week|month|year)$"),
+    categories: str = Query(default=""),  # comma-separated ids and/or "none"
+):
+    """Spending (expenses only, as positive magnitudes) bucketed over time,
+    one series per selected category. Categories marked is_transaction are
+    never counted, regardless of the request."""
+    today = datetime.now().date()
+    end_date = _parse_iso_date(end) if end else today
+    if start:
+        start_date = _parse_iso_date(start)
+    else:
+        # Default: the last 6 calendar months.
+        start_date = (end_date.replace(day=1) - timedelta(days=150)).replace(day=1)
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="start must be before end")
+
+    buckets = _bucket_range(start_date, end_date, granularity)
+    if len(buckets) > 400:
+        raise HTTPException(
+            status_code=400,
+            detail="Too many buckets for that range — pick a coarser granularity",
+        )
+
+    spendable = {
+        c.id: c
+        for c in db.query(Category).filter(
+            Category.user_id == user.id, Category.is_transaction.is_(False)
+        )
+    }
+    include_uncategorized = False
+    selected_ids: set[int] = set()
+    if categories.strip():
+        for part in categories.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if part == "none":
+                include_uncategorized = True
+            else:
+                try:
+                    cid = int(part)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Bad category id: {part}")
+                if cid in spendable:
+                    selected_ids.add(cid)
+    else:
+        selected_ids = set(spendable)
+        include_uncategorized = True
+
+    start_ts = _parse_date(start_date.isoformat(), end_of_day=False)
+    end_ts = _parse_date(end_date.isoformat(), end_of_day=True)
+    cat_filter = []
+    if selected_ids:
+        cat_filter.append(Transaction.category_id.in_(selected_ids))
+    if include_uncategorized:
+        cat_filter.append(Transaction.category_id.is_(None))
+    if not cat_filter:
+        return {"granularity": granularity, "buckets": buckets, "series": [], "grand_total": 0.0}
+
+    rows = (
+        db.query(Transaction.posted, Transaction.amount, Transaction.category_id)
+        .filter(
+            Transaction.user_id == user.id,
+            Transaction.deleted.is_(False),
+            Transaction.amount < 0,
+            Transaction.posted >= start_ts,
+            Transaction.posted <= end_ts,
+            or_(*cat_filter),
+        )
+        .all()
+    )
+
+    bucket_index = {b: i for i, b in enumerate(buckets)}
+    sums: dict[int | None, list[float]] = {}
+    for posted, amount, category_id in rows:
+        key = _bucket_key(datetime.fromtimestamp(posted).date(), granularity)
+        idx = bucket_index.get(key)
+        if idx is None:
+            continue  # posted timestamp lands outside the range edges
+        series = sums.setdefault(category_id, [0.0] * len(buckets))
+        series[idx] += -amount
+
+    def _series_json(category_id: int | None) -> dict:
+        values = [round(v, 2) for v in sums.get(category_id, [0.0] * len(buckets))]
+        if category_id is None:
+            meta = {"name": "Uncategorized", "emoji": "", "color": UNCATEGORIZED_COLOR}
+        else:
+            c = spendable[category_id]
+            meta = {"name": c.name, "emoji": c.emoji, "color": c.color}
+        return {
+            "key": "none" if category_id is None else str(category_id),
+            "category_id": category_id,
+            **meta,
+            "values": values,
+            "total": round(sum(values), 2),
+        }
+
+    series = [
+        _series_json(cid)
+        for cid in sorted(selected_ids, key=lambda i: spendable[i].name.lower())
+    ]
+    if include_uncategorized:
+        series.append(_series_json(None))
+    return {
+        "granularity": granularity,
+        "buckets": buckets,
+        "series": series,
+        "grand_total": round(sum(s["total"] for s in series), 2),
     }
