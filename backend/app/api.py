@@ -208,7 +208,10 @@ def _category_json(c: Category, txn_count: int) -> dict:
         "color": c.color,
         "is_transaction": c.is_transaction,
         "txn_count": txn_count,
-        "rules": [{"id": r.id, "substring": r.substring} for r in c.rules],
+        "rules": [
+            {"id": r.id, "substring": r.substring, "match_type": r.match_type}
+            for r in c.rules
+        ],
     }
 
 
@@ -343,6 +346,7 @@ def delete_category(
 
 class RuleBody(BaseModel):
     substring: str
+    match_type: Literal["substring", "payee"] = "substring"
 
 
 @router.post("/categories/{category_id}/rules")
@@ -356,10 +360,13 @@ def add_rule(
     substring = body.substring.strip()
     if not substring:
         raise HTTPException(status_code=400, detail="Substring cannot be empty")
-    dup = any(r.substring.lower() == substring.lower() for r in cat.rules)
+    dup = any(
+        r.substring.lower() == substring.lower() and r.match_type == body.match_type
+        for r in cat.rules
+    )
     if dup:
         raise HTTPException(status_code=409, detail=f"{substring!r} is already a rule here")
-    rule = CategoryRule(category_id=cat.id, substring=substring)
+    rule = CategoryRule(category_id=cat.id, substring=substring, match_type=body.match_type)
     db.add(rule)
     db.commit()
     # Adding a substring applies to uncategorized transactions only. Report
@@ -376,7 +383,7 @@ def add_rule(
     before = _count()
     categorize.categorize_uncategorized(db, user.id)
     return {
-        "rule": {"id": rule.id, "substring": rule.substring},
+        "rule": {"id": rule.id, "substring": rule.substring, "match_type": rule.match_type},
         "categorized": _count() - before,
     }
 

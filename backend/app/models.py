@@ -48,9 +48,10 @@ class Category(Base):
 
 
 class CategoryRule(Base):
-    """A substring rule: transactions whose description/payee/memo contain
-    the substring (case-insensitive) belong to the rule's category. Rules
-    match in creation order; first match wins."""
+    """A matching rule. match_type "substring" matches description/payee/memo
+    containing the text (case-insensitive); "payee" matches the payee field
+    exactly (case-insensitive). Rules match in creation order across both
+    types; first match wins."""
 
     __tablename__ = "category_rules"
 
@@ -59,6 +60,7 @@ class CategoryRule(Base):
         ForeignKey("categories.id", ondelete="CASCADE"), index=True
     )
     substring: Mapped[str] = mapped_column(String)
+    match_type: Mapped[str] = mapped_column(String, default="substring")
     created_at: Mapped[int] = mapped_column(Integer, default=now_ts)
 
     category: Mapped[Category] = relationship(back_populates="rules")

@@ -36,6 +36,7 @@ export interface Account {
 export interface CategoryRule {
   id: number;
   substring: string;
+  match_type: "substring" | "payee";
 }
 
 export interface Category {

@@ -70,9 +70,18 @@ def _migrate(eng) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_categories_user_lower_name "
             "ON categories (user_id, lower(name))"
         )
+        rule_cols = [
+            r[1] for r in conn.exec_driver_sql("PRAGMA table_info(category_rules)")
+        ]
+        if "match_type" not in rule_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE category_rules ADD COLUMN match_type VARCHAR "
+                "DEFAULT 'substring'"
+            )
+        conn.exec_driver_sql("DROP INDEX IF EXISTS ux_category_rules_lower")
         conn.exec_driver_sql(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ux_category_rules_lower "
-            "ON category_rules (category_id, lower(substring))"
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_category_rules_lower2 "
+            "ON category_rules (category_id, match_type, lower(substring))"
         )
         conn.commit()
 

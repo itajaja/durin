@@ -473,7 +473,16 @@ function CategoryCard({
           <span className="muted small">No substrings yet — add one below.</span>
         )}
         {category.rules.map((r) => (
-          <span key={r.id} className="rule-chip">
+          <span
+            key={r.id}
+            className="rule-chip"
+            title={
+              r.match_type === "payee"
+                ? "Matches the payee field exactly"
+                : "Matches description, payee, or memo"
+            }
+          >
+            {r.match_type === "payee" && <span className="rule-kind">payee:</span>}
             {r.substring}
             <button
               className="rule-x"

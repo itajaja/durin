@@ -52,6 +52,10 @@ export default function TransactionsPage() {
   const [addRuleOpen, setAddRuleOpen] = useState(false);
   const [addRuleBusy, setAddRuleBusy] = useState(false);
   const addRuleRef = useRef<HTMLDivElement | null>(null);
+  // Inline pickers: change one row's category (chip) or create a payee rule.
+  const [picker, setPicker] = useState<
+    { kind: "chip" | "payee"; txnId: number; payee?: string } | null
+  >(null);
 
   const alive = useRef(true);
   const fetchSeq = useRef(0);
@@ -95,6 +99,59 @@ export default function TransactionsPage() {
       document.removeEventListener("keydown", onKey);
     };
   }, [addRuleOpen]);
+
+  // Close the inline row pickers on outside click / Escape.
+  useEffect(() => {
+    if (!picker) return;
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest(".inline-pop")) setPicker(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPicker(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [picker]);
+
+  // Change one transaction's category in place (marked manual server-side).
+  const setRowCategory = async (txnId: number, categoryId: number | null) => {
+    setPicker(null);
+    try {
+      const updated = await api<Txn>(`/api/transactions/${txnId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ category_id: categoryId }),
+      });
+      setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      loadMeta();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change the category");
+    }
+  };
+
+  // Create a payee-match rule from a row's payee.
+  const addPayeeRule = async (payee: string, cat: Category) => {
+    setPicker(null);
+    setError("");
+    try {
+      const res = await api<{ categorized: number }>(`/api/categories/${cat.id}/rules`, {
+        method: "POST",
+        body: JSON.stringify({ substring: payee, match_type: "payee" }),
+      });
+      setNotice(
+        `Payee "${payee}" now maps to ${cat.name} — categorized ${res.categorized} transaction${
+          res.categorized === 1 ? "" : "s"
+        }.`
+      );
+      loadMeta();
+      loadFresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add the payee rule");
+    }
+  };
 
   // Initialize the facet selection to "everything" once categories load;
   // afterwards drop dead keys and auto-include newly created categories
@@ -617,8 +674,10 @@ export default function TransactionsPage() {
                   }`}
                   onClick={(e) => {
                     // Clicking the row toggles selection — but not when the
-                    // click was on a control or the user is selecting text.
-                    if ((e.target as HTMLElement).closest("button, input, a")) return;
+                    // click was on a control, a popover, or selected text.
+                    if ((e.target as HTMLElement).closest("button, input, a, .inline-pop")) {
+                      return;
+                    }
                     if (window.getSelection()?.toString()) return;
                     toggleSelected(t.id);
                   }}
@@ -641,25 +700,69 @@ export default function TransactionsPage() {
                     {t.edited && <span className="badge">edited</span>}
                     {(t.payee || t.memo) && (
                       <div className="muted small">
-                        {[t.payee, t.memo].filter(Boolean).join(" · ")}
+                        {t.payee && (
+                          <span className="payee-wrap">
+                            {t.payee}
+                            <button
+                              type="button"
+                              className="payee-tag-btn"
+                              title={`Always categorize payee "${t.payee}"…`}
+                              onClick={() =>
+                                setPicker({ kind: "payee", txnId: t.id, payee: t.payee })
+                              }
+                            >
+                              ⌖
+                            </button>
+                            {picker?.kind === "payee" && picker.txnId === t.id && (
+                              <InlinePicker
+                                title={`Payee "${t.payee}" always goes to…`}
+                                categories={categories}
+                                includeUncategorized={false}
+                                onPick={(id) => {
+                                  const cat = categories.find((c) => c.id === id);
+                                  if (cat && picker.payee) addPayeeRule(picker.payee, cat);
+                                }}
+                              />
+                            )}
+                          </span>
+                        )}
+                        {t.payee && t.memo ? " · " : ""}
+                        {t.memo}
                       </div>
                     )}
                   </td>
-                  <td className="nowrap">
+                  <td className="nowrap cat-cell">
                     {(() => {
                       const cat =
                         t.category_id != null ? categoriesById.get(t.category_id) : undefined;
-                      return cat ? (
-                        <span className="cat-chip" title={t.category_manual ? "Set by hand" : ""}>
-                          <span className="cat-dot" style={{ background: cat.color }} />
-                          {cat.emoji ? `${cat.emoji} ` : ""}
-                          {cat.name}
-                          {t.category_manual && <span className="manual-mark">✎</span>}
-                        </span>
-                      ) : (
-                        <span className="muted small">—</span>
+                      return (
+                        <button
+                          type="button"
+                          className="cat-chip-btn"
+                          title="Change this transaction's category"
+                          onClick={() => setPicker({ kind: "chip", txnId: t.id })}
+                        >
+                          {cat ? (
+                            <span className="cat-chip">
+                              <span className="cat-dot" style={{ background: cat.color }} />
+                              {cat.emoji ? `${cat.emoji} ` : ""}
+                              {cat.name}
+                              {t.category_manual && <span className="manual-mark">✎</span>}
+                            </span>
+                          ) : (
+                            <span className="muted small">—</span>
+                          )}
+                        </button>
                       );
                     })()}
+                    {picker?.kind === "chip" && picker.txnId === t.id && (
+                      <InlinePicker
+                        title="Category for this transaction"
+                        categories={categories}
+                        includeUncategorized
+                        onPick={(id) => setRowCategory(t.id, id)}
+                      />
+                    )}
                   </td>
                   <td className={`num nowrap ${t.amount < 0 ? "neg" : "pos"}`}>
                     {formatMoney(t.amount_str, t.currency)}
@@ -686,6 +789,39 @@ export default function TransactionsPage() {
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function InlinePicker({
+  title,
+  categories,
+  includeUncategorized,
+  onPick,
+}: {
+  title: string;
+  categories: Category[];
+  includeUncategorized: boolean;
+  onPick: (categoryId: number | null) => void;
+}) {
+  return (
+    <div className="msel-pop inline-pop">
+      <div className="inline-pop-title">{title}</div>
+      {includeUncategorized && (
+        <button type="button" className="msel-opt" onClick={() => onPick(null)}>
+          <span className="cat-dot" style={{ background: "#9b998e" }} />
+          <span className="msel-opt-label">Uncategorized</span>
+        </button>
+      )}
+      {categories.map((c) => (
+        <button type="button" key={c.id} className="msel-opt" onClick={() => onPick(c.id)}>
+          <span className="cat-dot" style={{ background: c.color }} />
+          <span className="msel-opt-label">
+            {c.emoji ? `${c.emoji} ` : ""}
+            {c.name}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

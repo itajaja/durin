@@ -593,6 +593,65 @@ button.msel-opt {
   color: var(--red);
 }
 
+/* ---- inline row pickers (payee rule / quick category change) ---- */
+.payee-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.payee-tag-btn {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  visibility: hidden;
+}
+
+.payee-wrap:hover .payee-tag-btn {
+  visibility: visible;
+}
+
+.cat-cell {
+  position: relative;
+}
+
+.cat-chip-btn {
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  margin: -0.15rem -0.3rem;
+  border-radius: 6px;
+}
+
+.cat-chip-btn:hover {
+  background: var(--hover);
+  outline: 1px solid var(--border);
+}
+
+.inline-pop {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  white-space: normal;
+}
+
+.inline-pop-title {
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 0.3rem 0.6rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+  max-width: 16rem;
+}
+
 .msel-opt-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -951,6 +1010,11 @@ code {
   padding: 0.2rem 0.35rem 0.2rem 0.7rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8rem;
+}
+
+.rule-kind {
+  color: var(--accent);
+  margin-right: 0.3rem;
 }
 
 .rule-x {

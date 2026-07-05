@@ -37,18 +37,25 @@ def _haystack(txn: Transaction) -> str:
 def _winner_fn(db: Session, user_id: int) -> Callable[[Transaction], int | None]:
     """Build a first-match-wins matcher over the user's rules."""
     rows = (
-        db.query(CategoryRule.substring, CategoryRule.category_id)
+        db.query(CategoryRule.substring, CategoryRule.match_type, CategoryRule.category_id)
         .join(Category, CategoryRule.category_id == Category.id)
         .filter(Category.user_id == user_id)
         .order_by(CategoryRule.id)
         .all()
     )
-    pairs = [(substring.lower(), category_id) for substring, category_id in rows]
+    rules = [
+        (substring.lower(), match_type, category_id)
+        for substring, match_type, category_id in rows
+    ]
 
     def winner(txn: Transaction) -> int | None:
         hay = _haystack(txn)
-        for substring, category_id in pairs:
-            if substring in hay:
+        payee = txn.payee.strip().lower()
+        for text, match_type, category_id in rules:
+            if match_type == "payee":
+                if payee and payee == text:
+                    return category_id
+            elif text in hay:
                 return category_id
         return None
 
