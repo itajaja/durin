@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, NavLink, Route, Routes } from "react-router-dom";
 import { api, ApiError } from "./api";
-import { DemoModeContext } from "./components/Money";
+import { DiscreteModeContext } from "./components/Money";
 import { Connection, REFRESHED_EVENT, SyncStatus, User } from "./types";
 import LoginPage from "./pages/LoginPage";
 import TransactionsPage from "./pages/TransactionsPage";
@@ -21,7 +21,9 @@ export default function App() {
   // undefined = still checking the session; null = not signed in.
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [theme, setTheme] = useState<Theme>(initialTheme);
-  const [demo, setDemo] = useState(() => localStorage.getItem("durin-demo") === "1");
+  const [discrete, setDiscrete] = useState(
+    () => localStorage.getItem("durin-discrete") === "1"
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState("");
@@ -30,8 +32,8 @@ export default function App() {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    localStorage.setItem("durin-demo", demo ? "1" : "0");
-  }, [demo]);
+    localStorage.setItem("durin-discrete", discrete ? "1" : "0");
+  }, [discrete]);
 
   // Close the user menu on outside click / Escape.
   useEffect(() => {
@@ -157,7 +159,7 @@ export default function App() {
   }
 
   return (
-    <DemoModeContext.Provider value={demo}>
+    <DiscreteModeContext.Provider value={discrete}>
     <BrowserRouter>
       <header className="topbar">
         <Link to="/" className="brand">
@@ -183,7 +185,7 @@ export default function App() {
             title={user.name}
             onClick={() => setMenuOpen(!menuOpen)}
           >
-            {demo && <span className="demo-badge">DEMO</span>}
+            {discrete && <span className="discrete-badge">DISCRETE</span>}
             <span className="user-email">{user.email}</span>
             <span className="msel-caret">▾</span>
           </button>
@@ -204,11 +206,11 @@ export default function App() {
                 type="button"
                 className="msel-opt"
                 role="menuitemcheckbox"
-                aria-checked={demo}
-                onClick={() => setDemo(!demo)}
+                aria-checked={discrete}
+                onClick={() => setDiscrete(!discrete)}
               >
-                <input type="checkbox" checked={demo} readOnly tabIndex={-1} />
-                <span className="msel-opt-label">Demo mode (mask amounts)</span>
+                <input type="checkbox" checked={discrete} readOnly tabIndex={-1} />
+                <span className="msel-opt-label">Discrete mode (mask amounts)</span>
               </button>
             </div>
           )}
@@ -228,6 +230,6 @@ export default function App() {
         </Routes>
       </main>
     </BrowserRouter>
-    </DemoModeContext.Provider>
+    </DiscreteModeContext.Provider>
   );
 }
