@@ -684,11 +684,26 @@ button.msel-opt {
   margin-bottom: 0.35rem;
 }
 
+.spend-chart rect {
+  transition: opacity 0.12s ease;
+}
+
 .tt-row {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.08rem 0;
+  padding: 0.08rem 0.3rem;
+  margin: 0 -0.3rem;
+  border-radius: 5px;
+}
+
+.tt-row-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.tt-row-active .tt-name {
+  color: var(--fg);
+  font-weight: 600;
 }
 
 .tt-name {

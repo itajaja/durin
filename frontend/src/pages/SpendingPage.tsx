@@ -83,6 +83,7 @@ export default function SpendingPage() {
   const [mixedCurrencies, setMixedCurrencies] = useState(false);
   const [error, setError] = useState("");
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
   const alive = useRef(true);
   const fetchSeq = useRef(0);
   const knownIds = useRef<Set<string>>(new Set());
@@ -173,6 +174,7 @@ export default function SpendingPage() {
       setData(resp);
       setError("");
       setHoverIdx(null);
+      setHoverKey(null);
     } catch (err) {
       if (!alive.current || mySeq !== fetchSeq.current) return;
       setError(err instanceof Error ? err.message : "Failed to load spending");
@@ -350,7 +352,8 @@ export default function SpendingPage() {
                   />
                 )}
 
-                {/* stacked bars: 2px surface gaps between segments */}
+                {/* stacked bars: 2px surface gaps between segments; hovering
+                    a segment spotlights that category across every bar */}
                 {buckets.map((_, i) => {
                   let acc = 0;
                   return (
@@ -370,6 +373,7 @@ export default function SpendingPage() {
                             height={h}
                             fill={s.color}
                             rx={1.5}
+                            opacity={hoverKey && s.key !== hoverKey ? 0.3 : 1}
                           />
                         );
                       })}
@@ -401,7 +405,8 @@ export default function SpendingPage() {
                   className="axis-line"
                 />
 
-                {/* hover hit targets */}
+                {/* hover hit targets: track both the column and, from the
+                    pointer's y position, the segment under it */}
                 {buckets.map((_, i) => (
                   <rect
                     key={i}
@@ -410,8 +415,29 @@ export default function SpendingPage() {
                     width={slotW}
                     height={plotH}
                     fill="transparent"
-                    onMouseEnter={() => setHoverIdx(i)}
-                    onMouseLeave={() => setHoverIdx(null)}
+                    onMouseMove={(e) => {
+                      setHoverIdx(i);
+                      const svg = e.currentTarget.ownerSVGElement;
+                      if (!svg) return;
+                      const box = svg.getBoundingClientRect();
+                      const yView = ((e.clientY - box.top) * CHART_H) / box.height;
+                      let acc = 0;
+                      let key: string | null = null;
+                      for (const s of data.series) {
+                        const v = s.values[i];
+                        if (v <= 0) continue;
+                        if (yView >= y(acc + v) && yView <= y(acc)) {
+                          key = s.key;
+                          break;
+                        }
+                        acc += v;
+                      }
+                      setHoverKey(key);
+                    }}
+                    onMouseLeave={() => {
+                      setHoverIdx(null);
+                      setHoverKey(null);
+                    }}
                   />
                 ))}
               </svg>
@@ -430,7 +456,10 @@ export default function SpendingPage() {
                     .filter((s) => s.values[hovered] > 0)
                     .sort((a, b) => b.values[hovered] - a.values[hovered])
                     .map((s) => (
-                      <div key={s.key} className="tt-row">
+                      <div
+                        key={s.key}
+                        className={`tt-row${s.key === hoverKey ? " tt-row-active" : ""}`}
+                      >
                         <span className="cat-dot" style={{ background: s.color }} />
                         <span className="tt-name">
                           {s.emoji ? `${s.emoji} ` : ""}
