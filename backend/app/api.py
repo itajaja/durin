@@ -440,6 +440,12 @@ def recategorize_category(
     return {"ok": True, **result}
 
 
+@router.post("/categorize/all")
+def recategorize_all(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    changed = categorize.recategorize_all(db, user.id)
+    return {"ok": True, "changed": changed}
+
+
 def _parse_date(value: str, end_of_day: bool) -> int:
     try:
         dt = datetime.strptime(value, "%Y-%m-%d")

@@ -748,6 +748,17 @@ code {
   outline-offset: 2px;
 }
 
+.cat-page-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.cat-page-actions form {
+  flex: 1 1 100%;
+}
+
 .cat-card {
   margin-bottom: 1rem;
 }

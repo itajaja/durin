@@ -46,6 +46,7 @@ export default function CategoriesPage() {
   const [data, setData] = useState<CategoriesResponse | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [recatBusy, setRecatBusy] = useState(false);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -82,6 +83,32 @@ export default function CategoriesPage() {
     setError("");
   };
 
+  const recategorizeAll = async () => {
+    if (
+      !window.confirm(
+        "Re-derive every transaction from the current substrings? " +
+          "Transactions matching no substring become uncategorized. " +
+          "Hand-categorized transactions are not touched."
+      )
+    ) {
+      return;
+    }
+    setRecatBusy(true);
+    setError("");
+    try {
+      const res = await api<{ changed: number }>("/api/categorize/all", {
+        method: "POST",
+        body: "{}",
+      });
+      flash(`Recategorized ${res.changed} transaction${res.changed === 1 ? "" : "s"}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Recategorize failed");
+    } finally {
+      setRecatBusy(false);
+    }
+  };
+
   return (
     <div className="page">
       <h2>Categories</h2>
@@ -95,14 +122,21 @@ export default function CategoriesPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-ok">{notice}</div>}
 
-      <NewCategoryForm
-        usedColors={data?.categories.map((c) => c.color) ?? []}
-        onCreated={(c) => {
-          flash(`Created ${c.name}.`);
-          load();
-        }}
-        onError={setError}
-      />
+      <div className="cat-page-actions">
+        <NewCategoryForm
+          usedColors={data?.categories.map((c) => c.color) ?? []}
+          onCreated={(c) => {
+            flash(`Created ${c.name}.`);
+            load();
+          }}
+          onError={setError}
+        />
+        {data && data.categories.length > 0 && (
+          <button className="btn btn-quiet" disabled={recatBusy} onClick={recategorizeAll}>
+            {recatBusy ? "Recategorizing…" : "Recategorize all"}
+          </button>
+        )}
+      </div>
 
       {data && data.categories.length === 0 && (
         <div className="card empty">

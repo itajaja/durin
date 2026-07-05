@@ -82,6 +82,23 @@ def categorize_uncategorized(db: Session, user_id: int) -> int:
         return changed
 
 
+def recategorize_all(db: Session, user_id: int) -> int:
+    """Re-derive every non-manual transaction from the current rules: each
+    gets its first-match-wins winner, or reverts to uncategorized when no
+    rule matches. Manual assignments are never touched."""
+    with _lock:
+        winner = _winner_fn(db, user_id)
+        changed = 0
+        for txn in _auto_scope(db, user_id).yield_per(500):
+            target = winner(txn)
+            if txn.category_id != target:
+                txn.category_id = target
+                changed += 1
+        db.commit()
+        log.info("recategorized all for user %d: %d changed", user_id, changed)
+        return changed
+
+
 def preview_rule(
     db: Session, user_id: int, category_id: int, substring: str, limit: int = 20
 ) -> tuple[int, list[Transaction]]:
