@@ -78,6 +78,7 @@ export default function AssetsPage() {
     from: searchParams.get("from"),
     to: searchParams.get("to"),
     accts: searchParams.get("accts"),
+    grp: searchParams.get("grp"),
   });
 
   const [{ start: defStart, end: defEnd }] = useState(defaultRange);
@@ -87,6 +88,8 @@ export default function AssetsPage() {
   const [selected, setSelected] = useState<Set<string> | null>(null); // null = not initialized
   const [error, setError] = useState("");
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [balSort, setBalSort] = useState<"desc" | "asc" | null>(null);
+  const [groupByInst, setGroupByInst] = useState(urlInit.current.grp === "1");
   const alive = useRef(true);
   const fetchSeq = useRef(0);
   const knownIds = useRef<Set<string>>(new Set());
@@ -165,9 +168,10 @@ export default function AssetsPage() {
     if (selected !== null && !allSelected) {
       p.set("accts", selected.size === 0 ? "~" : [...selected].sort().join(","));
     }
+    if (groupByInst) p.set("grp", "1");
     setSearchParams(p, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, selectedKey, selected === null]);
+  }, [start, end, selectedKey, selected === null, groupByInst]);
 
   const toggle = (key: string) => {
     setSelected((prev) => {
@@ -207,7 +211,7 @@ export default function AssetsPage() {
   const shown = accounts.filter((a) => selected?.has(String(a.id)) ?? false);
 
   // ---- series building: calendar-day axis, forward-filled ----
-  const { days, series, totals } = useMemo(() => {
+  const { days, totals } = useMemo(() => {
     const today = isoDate(new Date());
     const stop = end < today ? end : today; // never fill into the future
     let first: string | null = null;
@@ -323,6 +327,18 @@ export default function AssetsPage() {
 
       {accounts.length > 0 && (
         <div className="asset-picker card">
+          <div>
+            <button
+              className="btn btn-quiet btn-small"
+              onClick={() =>
+                setSelected(
+                  selected && selected.size > 0 ? new Set() : new Set(knownIds.current)
+                )
+              }
+            >
+              {selected && selected.size > 0 ? "Unselect all" : "Select all"}
+            </button>
+          </div>
           {groups.map((g) => {
             const keys = g.accounts.map((a) => String(a.id));
             const on = keys.filter((k) => selected?.has(k) ?? false).length;
@@ -518,17 +534,6 @@ export default function AssetsPage() {
                   }}
                 >
                   <div className="tt-title">{dayLabel(days[hovered], true)}</div>
-                  {series
-                    .filter((s) => s.values[hovered] !== null && s.values[hovered] !== 0)
-                    .sort((a, b) => (b.values[hovered] as number) - (a.values[hovered] as number))
-                    .map((s) => (
-                      <div key={s.account.id} className="tt-row">
-                        <span className="tt-name">{s.account.name}</span>
-                        <span className="tt-val">
-                          {fmt(s.values[hovered] as number, s.account.currency)}
-                        </span>
-                      </div>
-                    ))}
                   {totals[hovered] !== null && (
                     <div className="tt-row tt-total">
                       <span className="tt-name">Total</span>
@@ -544,26 +549,81 @@ export default function AssetsPage() {
 
       {shown.length > 0 && (
         <div className="card">
-          <h3>Current balances</h3>
+          <div className="card-head-row">
+            <h3>Current balances</h3>
+            <label className="cat-check">
+              <input
+                type="checkbox"
+                checked={groupByInst}
+                onChange={() => setGroupByInst(!groupByInst)}
+              />
+              <span>Group by institution</span>
+            </label>
+          </div>
           <table>
             <thead>
               <tr>
                 <th>Account</th>
-                <th className="num">Balance</th>
+                <th
+                  className="num sortable"
+                  onClick={() => setBalSort(balSort === "desc" ? "asc" : "desc")}
+                >
+                  Balance{balSort ? (balSort === "asc" ? " ▲" : " ▼") : ""}
+                </th>
                 <th>As of</th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((a) => (
-                <tr key={a.id}>
-                  <td>
-                    {a.name}
-                    {a.org_name ? <span className="muted"> · {a.org_name}</span> : null}
-                  </td>
-                  <td className="num nowrap">{fmt(a.balance, a.currency)}</td>
-                  <td className="muted nowrap">{formatDate(a.balance_date)}</td>
-                </tr>
-              ))}
+              {(() => {
+                const bal = (a: AssetAccount) => Number(a.balance) || 0;
+                const sorted = balSort
+                  ? [...shown].sort((a, b) =>
+                      balSort === "asc" ? bal(a) - bal(b) : bal(b) - bal(a)
+                    )
+                  : shown;
+                if (!groupByInst)
+                  return sorted.map((a) => (
+                    <tr key={a.id}>
+                      <td>
+                        {a.name}
+                        {a.org_name ? <span className="muted"> · {a.org_name}</span> : null}
+                      </td>
+                      <td className={`num nowrap bal-cell ${bal(a) < 0 ? "neg" : "pos"}`}>
+                        {fmt(a.balance, a.currency)}
+                      </td>
+                      <td className="muted nowrap">{formatDate(a.balance_date)}</td>
+                    </tr>
+                  ));
+                const instGroups = new Map<string, AssetAccount[]>();
+                for (const a of sorted) {
+                  const key = a.org_name || "Other";
+                  instGroups.set(key, [...(instGroups.get(key) ?? []), a]);
+                }
+                let entries = [...instGroups.entries()];
+                if (balSort) {
+                  const sub = (accts: AssetAccount[]) =>
+                    accts.reduce((s, a) => s + bal(a), 0);
+                  entries = entries.sort((x, y) =>
+                    balSort === "asc" ? sub(x[1]) - sub(y[1]) : sub(y[1]) - sub(x[1])
+                  );
+                }
+                // Grouped view rolls each institution up to its sum alone.
+                return entries.map(([inst, accts]) => {
+                  const subtotal = accts.reduce((s, a) => s + bal(a), 0);
+                  return (
+                    <tr key={`inst:${inst}`}>
+                      <td>
+                        {inst}
+                        <span className="muted small"> · {accts.length} account{accts.length === 1 ? "" : "s"}</span>
+                      </td>
+                      <td className={`num nowrap bal-cell ${subtotal < 0 ? "neg" : "pos"}`}>
+                        {fmt(subtotal, accts[0].currency)}
+                      </td>
+                      <td />
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
             <tfoot>
               <tr className="total-row">
