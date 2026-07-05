@@ -817,6 +817,28 @@ button.msel-opt {
   font-weight: 600;
 }
 
+.total-dot {
+  fill: var(--fg);
+}
+
+.asset-picker {
+  padding: 0.6rem 1.25rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.picker-group .group-head {
+  padding: 0.25rem 0;
+}
+
+.group-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  padding-left: 1.7rem;
+}
+
 .tt-row {
   display: flex;
   align-items: center;

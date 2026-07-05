@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, formatDate } from "../api";
 import { useMoney } from "../components/Money";
 import DatePresets from "../components/DatePresets";
-import { AssetAccount, AssetsResponse, CATEGORY_COLORS, REFRESHED_EVENT } from "../types";
+import { AssetAccount, AssetsResponse, REFRESHED_EVENT } from "../types";
 
 const CHART_W = 900;
 const CHART_H = 340;
@@ -112,7 +112,11 @@ export default function AssetsPage() {
       setData(resp);
       setError("");
       setHoverIdx(null);
-      const validKeys = new Set(resp.accounts.map((a) => String(a.id)));
+      // Accounts without any history in range are hidden entirely, so they
+      // can't be picked either.
+      const validKeys = new Set(
+        resp.accounts.filter((a) => a.points.length > 0).map((a) => String(a.id))
+      );
       const prevKnown = new Set(knownIds.current);
       knownIds.current = validKeys;
       setSelected((prev) => {
@@ -174,15 +178,31 @@ export default function AssetsPage() {
     });
   };
 
-  const accounts = data?.accounts ?? [];
-  // Color follows the account (its position in the full list), never the
-  // current selection, so filtering doesn't repaint the survivors.
-  const colorFor = (a: AssetAccount) =>
-    CATEGORY_COLORS[accounts.findIndex((x) => x.id === a.id) % CATEGORY_COLORS.length];
-
+  // Hide accounts with no history to show in this range; snapshots start
+  // accumulating for them with each sync, so they appear once they have data.
+  const rawCount = data?.accounts.length ?? 0;
+  const accounts = useMemo(
+    () => (data?.accounts ?? []).filter((a) => a.points.length > 0),
+    [data]
+  );
   const currencies = new Set(accounts.map((a) => a.currency));
   const currency = currencies.size === 1 && accounts.length > 0 ? accounts[0].currency : "USD";
   const mixedCurrencies = currencies.size > 1;
+
+  // Group by institution (accounts arrive sorted by org, name).
+  const groups = useMemo(() => {
+    const byOrg = new Map<string, { name: string; accounts: AssetAccount[] }>();
+    for (const a of accounts) {
+      const key = a.org_name || "Other";
+      let g = byOrg.get(key);
+      if (!g) {
+        g = { name: key, accounts: [] };
+        byOrg.set(key, g);
+      }
+      g.accounts.push(a);
+    }
+    return [...byOrg.values()];
+  }, [accounts]);
 
   const shown = accounts.filter((a) => selected?.has(String(a.id)) ?? false);
 
@@ -235,8 +255,8 @@ export default function AssetsPage() {
   // ---- chart geometry ----
   const plotW = CHART_W - MARGIN.left - MARGIN.right;
   const plotH = CHART_H - MARGIN.top - MARGIN.bottom;
+  // Only the sum is plotted, so the y domain fits it alone.
   const allValues: number[] = [];
-  for (const s of series) for (const v of s.values) if (v !== null) allValues.push(v);
   for (const v of totals) if (v !== null) allValues.push(v);
   const { lo, hi, ticks } = niceDomain(
     Math.min(...(allValues.length ? allValues : [0])),
@@ -302,29 +322,46 @@ export default function AssetsPage() {
       </div>
 
       {accounts.length > 0 && (
-        <div className="cat-picker card">
-          <button
-            className="btn btn-quiet btn-small"
-            disabled={!selected || selected.size === 0}
-            onClick={() => setSelected(new Set())}
-          >
-            Unselect all
-          </button>
-          {accounts.map((a) => (
-            <label key={a.id} className="cat-check">
-              <input
-                type="checkbox"
-                checked={selected?.has(String(a.id)) ?? false}
-                onChange={() => toggle(String(a.id))}
-              />
-              <span className="cat-dot" style={{ background: colorFor(a) }} />
-              <span>
-                {a.name}
-                {a.org_name ? <span className="muted"> · {a.org_name}</span> : null}
-              </span>
-              <span className="muted small">{fmt(a.balance, a.currency)}</span>
-            </label>
-          ))}
+        <div className="asset-picker card">
+          {groups.map((g) => {
+            const keys = g.accounts.map((a) => String(a.id));
+            const on = keys.filter((k) => selected?.has(k) ?? false).length;
+            return (
+              <div key={g.name} className="picker-group">
+                <label className="cat-check group-head">
+                  <input
+                    type="checkbox"
+                    checked={on === keys.length}
+                    ref={(el) => {
+                      if (el) el.indeterminate = on > 0 && on < keys.length;
+                    }}
+                    onChange={() => {
+                      setSelected((prev) => {
+                        const next = new Set(prev ?? []);
+                        if (on === keys.length) keys.forEach((k) => next.delete(k));
+                        else keys.forEach((k) => next.add(k));
+                        return next;
+                      });
+                    }}
+                  />
+                  <strong>{g.name}</strong>
+                </label>
+                <div className="group-accounts">
+                  {g.accounts.map((a) => (
+                    <label key={a.id} className="cat-check">
+                      <input
+                        type="checkbox"
+                        checked={selected?.has(String(a.id)) ?? false}
+                        onChange={() => toggle(String(a.id))}
+                      />
+                      <span>{a.name}</span>
+                      <span className="muted small">{fmt(a.balance, a.currency)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -338,9 +375,15 @@ export default function AssetsPage() {
 
       {data === null ? (
         <div className="card empty">Loading…</div>
-      ) : accounts.length === 0 ? (
+      ) : rawCount === 0 ? (
         <div className="card empty">
           No accounts yet — add a SimpleFin connection in Settings.
+        </div>
+      ) : accounts.length === 0 ? (
+        <div className="card empty">
+          No balance history in this range yet. Durin records a snapshot of every account's
+          balance at each sync, so history builds up from today — SimpleFin has no historical
+          balances to backfill.
         </div>
       ) : selected !== null && selected.size === 0 ? (
         <div className="card empty">Pick at least one account to plot.</div>
@@ -402,36 +445,15 @@ export default function AssetsPage() {
                   />
                 )}
 
-                {/* per-account lines */}
-                {series.map((s) => (
-                  <path
-                    key={s.account.id}
-                    d={linePath(s.values)}
-                    fill="none"
-                    stroke={colorFor(s.account)}
-                    strokeWidth={2}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
+                {/* the sum of the selected accounts, as a single line */}
+                {pointCount(totals) === 1 ? (
+                  <circle
+                    cx={x(totals.findIndex((v) => v !== null))}
+                    cy={y(totals.find((v) => v !== null) as number)}
+                    r={3}
+                    className="total-dot"
                   />
-                ))}
-                {/* a series with a single reading has no line to show */}
-                {series
-                  .filter((s) => pointCount(s.values) === 1)
-                  .map((s) => {
-                    const i = s.values.findIndex((v) => v !== null);
-                    return (
-                      <circle
-                        key={s.account.id}
-                        cx={x(i)}
-                        cy={y(s.values[i] as number)}
-                        r={3}
-                        fill={colorFor(s.account)}
-                      />
-                    );
-                  })}
-
-                {/* total line, only when it adds information */}
-                {series.length > 1 && (
+                ) : (
                   <path
                     d={linePath(totals)}
                     fill="none"
@@ -442,22 +464,15 @@ export default function AssetsPage() {
                   />
                 )}
 
-                {/* hovered-day markers */}
-                {hovered !== null &&
-                  series.map((s) => {
-                    const v = s.values[hovered];
-                    if (v === null) return null;
-                    return (
-                      <circle
-                        key={s.account.id}
-                        cx={x(hovered)}
-                        cy={y(v)}
-                        r={3.5}
-                        fill={colorFor(s.account)}
-                        className="point-ring"
-                      />
-                    );
-                  })}
+                {/* hovered-day marker */}
+                {hovered !== null && totals[hovered] !== null && (
+                  <circle
+                    cx={x(hovered)}
+                    cy={y(totals[hovered] as number)}
+                    r={4}
+                    className="total-dot point-ring"
+                  />
+                )}
 
                 {/* x labels (thinned) */}
                 {days.map((d, i) =>
@@ -504,18 +519,17 @@ export default function AssetsPage() {
                 >
                   <div className="tt-title">{dayLabel(days[hovered], true)}</div>
                   {series
-                    .filter((s) => s.values[hovered] !== null)
+                    .filter((s) => s.values[hovered] !== null && s.values[hovered] !== 0)
                     .sort((a, b) => (b.values[hovered] as number) - (a.values[hovered] as number))
                     .map((s) => (
                       <div key={s.account.id} className="tt-row">
-                        <span className="cat-dot" style={{ background: colorFor(s.account) }} />
                         <span className="tt-name">{s.account.name}</span>
                         <span className="tt-val">
                           {fmt(s.values[hovered] as number, s.account.currency)}
                         </span>
                       </div>
                     ))}
-                  {series.length > 1 && totals[hovered] !== null && (
+                  {totals[hovered] !== null && (
                     <div className="tt-row tt-total">
                       <span className="tt-name">Total</span>
                       <span className="tt-val">{fmt(totals[hovered] as number, currency)}</span>
@@ -543,11 +557,8 @@ export default function AssetsPage() {
               {shown.map((a) => (
                 <tr key={a.id}>
                   <td>
-                    <span className="cat-chip">
-                      <span className="cat-dot" style={{ background: colorFor(a) }} />
-                      {a.name}
-                      {a.org_name ? <span className="muted"> · {a.org_name}</span> : null}
-                    </span>
+                    {a.name}
+                    {a.org_name ? <span className="muted"> · {a.org_name}</span> : null}
                   </td>
                   <td className="num nowrap">{fmt(a.balance, a.currency)}</td>
                   <td className="muted nowrap">{formatDate(a.balance_date)}</td>
