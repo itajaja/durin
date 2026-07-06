@@ -86,6 +86,18 @@ export interface SpendingResponse {
   grand_avg_month: number;
 }
 
+export interface CashflowResponse {
+  granularity: "day" | "week" | "month" | "year";
+  buckets: string[];
+  income: number[];
+  spending: number[];
+  net: number[];
+  total_income: number;
+  total_spending: number;
+  total_net: number;
+  avg_net_month: number;
+}
+
 export interface AssetPoint {
   day: string; // YYYY-MM-DD
   balance: number;

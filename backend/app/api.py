@@ -947,3 +947,79 @@ def spending(
         "grand_total": grand_total,
         "grand_avg_month": round(grand_total / months_span, 2),
     }
+
+
+@router.get("/cashflow")
+def cashflow(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    start: str = Query(default=""),
+    end: str = Query(default=""),
+    granularity: str = Query(default="month", pattern="^(day|week|month|year)$"),
+):
+    """Income vs spending bucketed over time. Categories marked
+    is_transaction (transfers, card payments…) are excluded entirely;
+    uncategorized transactions count."""
+    today = datetime.now().date()
+    end_date = _parse_iso_date(end) if end else today
+    if start:
+        start_date = _parse_iso_date(start)
+    else:
+        # Default: the last 6 calendar months.
+        start_date = (end_date.replace(day=1) - timedelta(days=150)).replace(day=1)
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="start must be before end")
+
+    buckets = _bucket_range(start_date, end_date, granularity)
+    if len(buckets) > 400:
+        raise HTTPException(
+            status_code=400,
+            detail="Too many buckets for that range — pick a coarser granularity",
+        )
+
+    start_ts = _parse_date(start_date.isoformat(), end_of_day=False)
+    end_ts = _parse_date(end_date.isoformat(), end_of_day=True)
+    rows = (
+        db.query(Transaction.posted, Transaction.amount)
+        .outerjoin(Category, Transaction.category_id == Category.id)
+        .filter(
+            Transaction.user_id == user.id,
+            Transaction.deleted.is_(False),
+            Transaction.posted >= start_ts,
+            Transaction.posted <= end_ts,
+            or_(Transaction.category_id.is_(None), Category.is_transaction.is_(False)),
+        )
+        .all()
+    )
+
+    bucket_index = {b: i for i, b in enumerate(buckets)}
+    income = [0.0] * len(buckets)
+    spending = [0.0] * len(buckets)
+    for posted, amount in rows:
+        key = _bucket_key(datetime.fromtimestamp(posted).date(), granularity)
+        idx = bucket_index.get(key)
+        if idx is None:
+            continue  # posted timestamp lands outside the range edges
+        if amount >= 0:
+            income[idx] += amount
+        else:
+            spending[idx] += -amount
+
+    income = [round(v, 2) for v in income]
+    spending = [round(v, 2) for v in spending]
+    net = [round(i - s, 2) for i, s in zip(income, spending)]
+    total_income = round(sum(income), 2)
+    total_spending = round(sum(spending), 2)
+    total_net = round(total_income - total_spending, 2)
+    months_span = max(((end_date - start_date).days + 1) / 30.4375, 1.0)
+    return {
+        "granularity": granularity,
+        "buckets": buckets,
+        "income": income,
+        "spending": spending,
+        "net": net,
+        "total_income": total_income,
+        "total_spending": total_spending,
+        "total_net": total_net,
+        "avg_net_month": round(total_net / months_span, 2),
+    }

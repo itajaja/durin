@@ -1073,6 +1073,28 @@ button.msel-opt {
   margin-bottom: 0.35rem;
 }
 
+/* cash flow: income up in green, spending down in red, net line in gold */
+.cf-in {
+  fill: var(--credit);
+}
+
+.cf-out {
+  fill: var(--debit);
+}
+
+.cf-net-line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 6 4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.cf-net-dot {
+  fill: var(--text);
+}
+
 .spend-chart rect {
   transition: opacity 0.12s ease;
 }
