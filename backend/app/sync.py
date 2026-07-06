@@ -151,9 +151,32 @@ def _upsert_account(db: Session, conn: Connection, payload: dict) -> tuple[Accou
 def _record_balance_snapshot(db: Session, account: Account) -> None:
     """Upsert today's balance reading for the Assets page. The day comes
     from the bank's balance-date stamp (falling back to now), so a stale
-    stamp lands on the day it was actually accurate for."""
+    stamp lands on the day it was actually accurate for.
+
+    Zero balances are skipped UNLESS the latest recorded reading is
+    nonzero: never-funded accounts produce no history at all (they stay
+    hidden on the Assets page), but the single zero marking an account
+    being emptied/paid off is kept — without it the chart would
+    forward-fill the last nonzero balance forever."""
+    try:
+        value = float(account.balance)
+    except (TypeError, ValueError):
+        value = 0.0
     ts = account.balance_date or now_ts()
     day = datetime.fromtimestamp(ts).date().isoformat()
+    if value == 0:
+        latest = (
+            db.query(BalanceSnapshot)
+            .filter(BalanceSnapshot.account_id == account.id)
+            .order_by(BalanceSnapshot.day.desc())
+            .first()
+        )
+        try:
+            latest_value = float(latest.balance) if latest else 0.0
+        except (TypeError, ValueError):
+            latest_value = 0.0
+        if latest is None or (latest_value == 0 and latest.day != day):
+            return
     row = (
         db.query(BalanceSnapshot)
         .filter(

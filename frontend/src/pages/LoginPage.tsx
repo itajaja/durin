@@ -110,7 +110,20 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
         }}
       />
       <div className="login-dust">{MOTES}</div>
-      <div className="login-card">
+      <div
+        className="login-card"
+        style={{
+          // 3D tilt toward the cursor: the corner under the mouse leans
+          // away, as if the plane were inclined into the rock.
+          transform: torch
+            ? `perspective(900px) rotateX(${(
+                -((torch.y / window.innerHeight) * 2 - 1) * 15
+              ).toFixed(2)}deg) rotateY(${(
+                ((torch.x / window.innerWidth) * 2 - 1) * 15
+              ).toFixed(2)}deg)`
+            : undefined,
+        }}
+      >
         <div className="login-mark-wrap">
           <h1 className="login-wordmark">Durin</h1>
         </div>

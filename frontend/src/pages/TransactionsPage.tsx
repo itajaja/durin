@@ -757,7 +757,6 @@ export default function TransactionsPage() {
                   <td>
                     {maskText(t.description || t.payee || "(no description)")}
                     {t.pending && <span className="badge">pending</span>}
-                    {t.edited && <span className="badge">edited</span>}
                     {(t.payee || t.memo) && (
                       <div className="muted small">
                         {t.payee && (

@@ -560,7 +560,7 @@ export default function AssetsPage() {
               <span>Group by institution</span>
             </label>
           </div>
-          <table>
+          <table className="hover-rows">
             <thead>
               <tr>
                 <th>Account</th>

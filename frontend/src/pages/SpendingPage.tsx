@@ -510,7 +510,7 @@ export default function SpendingPage() {
 
           <div className="card">
             <h3>Totals for this range</h3>
-            <table>
+            <table className="hover-rows">
               <thead>
                 <tr>
                   <th>Category</th>

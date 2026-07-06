@@ -35,6 +35,7 @@
   --chip-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
   --nav-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   --gold-hairline: rgba(176, 125, 30, 0.4);
+  --pop-shadow: 0 8px 22px rgba(74, 52, 12, 0.28), 0 0 16px rgba(176, 125, 30, 0.3);
   --vein: linear-gradient(90deg, rgba(176, 125, 30, 0) 0%, #b07d1e 18%, #d9a83c 30%, #b07d1e 46%, rgba(176, 125, 30, 0.15) 70%, rgba(176, 125, 30, 0) 100%);
 
   /* Aliases kept from the previous theme so every rule below reads the
@@ -84,6 +85,7 @@
   --chip-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
   --nav-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --gold-hairline: rgba(227, 162, 56, 0.28);
+  --pop-shadow: 0 8px 24px rgba(15, 9, 0, 0.6), 0 0 20px rgba(227, 162, 56, 0.22);
   --vein: linear-gradient(90deg, rgba(227, 162, 56, 0) 0%, #e3a238 18%, #f5d07a 30%, #e3a238 46%, rgba(227, 162, 56, 0.15) 70%, rgba(227, 162, 56, 0) 100%);
 
   --accent-dark: #f0be5e;
@@ -264,10 +266,22 @@ h2::after {
   gap: 0.75rem;
   align-items: end;
   margin: 0.75rem 0 1rem;
+  padding: 12px 14px;
+  /* No z-index here: a stacking context would trap the .msel-pop popovers
+     (z-index 30) beneath the positioned cells in the table below. */
+  position: relative;
+}
+
+/* The shell lives on a pseudo-element: clip-path clips every descendant,
+   and the dropdown popovers must overflow past the shelf's edge. */
+.filters::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: var(--inset);
   border: 1px solid var(--slab-border);
   box-shadow: var(--inset-shadow);
-  padding: 12px 14px;
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
 }
 
@@ -396,7 +410,8 @@ th {
   background: var(--panel-hd);
 }
 
-.txn-table tbody tr:hover {
+.txn-table tbody tr:hover,
+.hover-rows tbody tr:hover {
   background: var(--row-hover);
 }
 
@@ -585,6 +600,8 @@ th.sortable:hover {
   max-width: 460px;
   background: none;
   border: none;
+  transition: transform 0.12s ease-out;
+  will-change: transform;
 }
 
 .login-wordmark {
@@ -789,7 +806,7 @@ th.sortable:hover {
   overflow-y: auto;
   background: var(--nav);
   border: 1px solid var(--gold-hairline);
-  box-shadow: 0 8px 24px var(--shadow);
+  box-shadow: var(--pop-shadow);
   padding: 0.35rem;
 }
 
@@ -1043,7 +1060,7 @@ button.msel-opt {
   top: 16px;
   background: var(--nav);
   border: 1px solid var(--gold-hairline);
-  box-shadow: 0 4px 14px var(--shadow);
+  box-shadow: var(--pop-shadow);
   padding: 0.55rem 0.75rem;
   pointer-events: none;
   min-width: 190px;
