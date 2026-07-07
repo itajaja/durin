@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMoney } from "../components/Money";
 import DatePresets from "../components/DatePresets";
+import Select from "../components/Dropdown";
+import useUrlFilterSync from "../components/useUrlFilterSync";
 import {
   Account,
   CategoriesResponse,
@@ -62,7 +64,7 @@ interface PickerEntry {
 
 export default function SpendingPage() {
   const { fmt, fmtCompact } = useMoney();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const urlInit = useRef({
     from: searchParams.get("from"),
     to: searchParams.get("to"),
@@ -159,22 +161,43 @@ export default function SpendingPage() {
 
   const selectedKey = selected ? [...selected].sort().join(",") : "";
 
-  // Mirror the state into the URL so reloads and shared links restore it.
-  useEffect(() => {
-    if (selected === null && urlInit.current.cats != null) return; // not hydrated
-    const allSelected =
-      selected === null ||
-      (knownIds.current.size > 0 && [...knownIds.current].every((k) => selected.has(k)));
-    const p = new URLSearchParams();
-    if (start !== defStart) p.set("from", start);
-    if (end !== defEnd) p.set("to", end);
-    if (granularity !== "month") p.set("g", granularity);
-    if (selected !== null && !allSelected) {
-      p.set("cats", selected.size === 0 ? "~" : [...selected].sort().join(","));
-    }
-    setSearchParams(p, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, granularity, selectedKey, selected === null]);
+  // Two-way URL sync: filter changes push history entries (so Back/Forward
+  // steps through filter states), and popping an entry re-hydrates the state.
+  useUrlFilterSync(
+    () => {
+      if (selected === null && urlInit.current.cats != null) return null; // not hydrated
+      const allSelected =
+        selected === null ||
+        (knownIds.current.size > 0 && [...knownIds.current].every((k) => selected.has(k)));
+      const p = new URLSearchParams();
+      if (start !== defStart) p.set("from", start);
+      if (end !== defEnd) p.set("to", end);
+      if (granularity !== "month") p.set("g", granularity);
+      if (selected !== null && !allSelected) {
+        p.set("cats", selected.size === 0 ? "~" : [...selected].sort().join(","));
+      }
+      return p;
+    },
+    (p) => {
+      setStart(p.get("from") ?? defStart);
+      setEnd(p.get("to") ?? defEnd);
+      const g = p.get("g");
+      setGranularity(g === "day" || g === "week" || g === "year" ? g : "month");
+      const cats = p.get("cats");
+      setSelected((prev) => {
+        if (prev === null) {
+          // Categories haven't loaded yet — leave the hydration marker for
+          // the load-time initializer to honor.
+          urlInit.current.cats = cats;
+          return prev;
+        }
+        if (cats === null) return new Set(knownIds.current);
+        if (cats === "~") return new Set();
+        return new Set(cats.split(",").filter((k) => knownIds.current.has(k)));
+      });
+    },
+    [start, end, granularity, selectedKey, selected === null]
+  );
 
   const loadSpending = useCallback(async () => {
     if (selected === null) return;
@@ -280,27 +303,29 @@ export default function SpendingPage() {
             setEnd(e);
           }}
         />
-        <label>
-          Group by
-          <select
-            value={granularity}
-            onChange={(e) => setGranularity(e.target.value as Granularity)}
-          >
-            <option value="month">Month</option>
-            <option value="week">Week</option>
-            <option value="day">Day</option>
-            <option value="year">Year</option>
-          </select>
-        </label>
+        <Select
+          label="Group by"
+          value={granularity}
+          options={[
+            { value: "month", label: "Month" },
+            { value: "week", label: "Week" },
+            { value: "day", label: "Day" },
+            { value: "year", label: "Year" },
+          ]}
+          onChange={(v) => setGranularity(v as Granularity)}
+        />
       </div>
 
       <div className="cat-picker card">
         <button
           className="btn btn-quiet btn-small"
-          disabled={!selected || selected.size === 0}
-          onClick={() => setSelected(new Set())}
+          onClick={() =>
+            setSelected(
+              selected && selected.size > 0 ? new Set() : new Set(knownIds.current)
+            )
+          }
         >
-          Unselect all
+          {selected && selected.size > 0 ? "Unselect all" : "Select all"}
         </button>
         {pickerEntries.map((entry) => (
           <label key={entry.key} className="cat-check">

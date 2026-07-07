@@ -1,14 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { filterOptions, Highlight, Option, usePopover } from "./Dropdown";
+import { useState } from "react";
 
-export interface MultiSelectOption {
-  value: string;
-  label: string;
-  /** Optional color dot rendered before the label. */
-  color?: string;
-}
+export type MultiSelectOption = Option;
 
 /** A compact multiselect combobox: a select-looking button that opens a
- * checkbox list.
+ * checkbox list. Type while open to filter the options (the query stays
+ * invisible; matched letters are bolded); Enter toggles the first match.
  *
  * Two interaction models:
  * - default: empty selection means "all" (no filter); clicking a row
@@ -34,25 +31,6 @@ export default function MultiSelect({
   facet?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
 
   const toggle = (value: string) => {
     const next = new Set(selected);
@@ -60,6 +38,15 @@ export default function MultiSelect({
     else next.add(value);
     onChange(next);
   };
+
+  const { rootRef, query } = usePopover(
+    open,
+    () => setOpen(false),
+    (q) => {
+      const first = filterOptions(options, q)[0];
+      if (first) toggle(first.value);
+    }
+  );
 
   const allSelected = facet && options.every((o) => selected.has(o.value));
 
@@ -78,6 +65,7 @@ export default function MultiSelect({
         : `${selected.size} selected`;
 
   const filterActive = facet ? !allSelected : selected.size > 0;
+  const shown = filterOptions(options, query);
 
   return (
     <div className="msel" ref={rootRef}>
@@ -104,7 +92,8 @@ export default function MultiSelect({
           >
             {allLabel}
           </button>
-          {options.map((o) => (
+          {shown.length === 0 && <div className="msel-empty">No matches</div>}
+          {shown.map((o) => (
             <div key={o.value} className="msel-opt">
               <input
                 type="checkbox"
@@ -119,7 +108,7 @@ export default function MultiSelect({
                 title={facet ? "Show only this" : undefined}
                 onClick={() => (facet ? onChange(new Set([o.value])) : toggle(o.value))}
               >
-                {o.label}
+                <Highlight text={o.label} query={query} />
               </span>
               {facet && (
                 <button

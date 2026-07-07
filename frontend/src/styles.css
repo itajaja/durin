@@ -451,6 +451,13 @@ th.sortable:hover {
   opacity: 0.75;
 }
 
+/* An open category picker inside the row must not inherit the pending dim —
+   the row's opacity would render the popover translucent AND create a
+   stacking context that traps it beneath later rows. */
+.pending-row:has(.inline-pop) {
+  opacity: 1;
+}
+
 .empty {
   text-align: center;
   color: var(--muted);
@@ -954,6 +961,28 @@ button.msel-opt {
   text-overflow: ellipsis;
 }
 
+/* Type-to-filter: the query itself is never shown — the matched letters
+   light up inside the remaining options instead. */
+.msel-hl {
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.msel-empty {
+  padding: 0.4rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.msel-opt-selected .msel-opt-label {
+  color: var(--gold);
+}
+
+.msel-summary .cat-dot {
+  margin-right: 0.4rem;
+}
+
 /* ---- categories ---- */
 .cat-dot {
   display: inline-block;
@@ -1201,15 +1230,24 @@ code {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background: var(--nav);
-  border: 1px solid var(--gold-hairline);
-  box-shadow: var(--slab-shadow);
-  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   padding: 0.55rem 0.9rem;
   margin-bottom: 0.75rem;
   position: sticky;
   top: 3.6rem;
   z-index: 5;
+}
+
+/* Like .filters, the shell lives on a pseudo-element: clip-path clips every
+   descendant, and the category dropdown must overflow past the bar's edge. */
+.batch-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--nav);
+  border: 1px solid var(--gold-hairline);
+  box-shadow: var(--slab-shadow);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
 }
 
 .check-col {
@@ -1263,10 +1301,32 @@ code {
   min-width: 160px;
 }
 
+/* The category dropdown sits among the text fields and stretches like them. */
+.edit-fields .msel {
+  flex: 1;
+  min-width: 160px;
+}
+
+.edit-fields .msel-btn {
+  width: 100%;
+  min-width: 0;
+}
+
 .edit-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.alias-input {
+  width: 100%;
+  min-width: 9rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.alias-input::placeholder {
+  font-style: italic;
+  opacity: 0.5;
 }
 
 /* ---- categories page ---- */

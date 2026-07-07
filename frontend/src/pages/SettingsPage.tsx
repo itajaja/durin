@@ -3,6 +3,59 @@ import { api, formatDateTime } from "../api";
 import Money from "../components/Money";
 import { Account, Connection } from "../types";
 
+/** Inline alias editor: saves on blur or Enter, only when the value
+ * actually changed. An empty value clears the alias. */
+function AliasInput({
+  account,
+  onSaved,
+  onError,
+}: {
+  account: Account;
+  onSaved: () => void;
+  onError: (message: string) => void;
+}) {
+  const [value, setValue] = useState(account.alias);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setValue(account.alias);
+  }, [account.alias]);
+
+  const save = async () => {
+    const next = value.trim();
+    if (next === account.alias) return;
+    setBusy(true);
+    try {
+      await api(`/api/accounts/${account.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ alias: next }),
+      });
+      onSaved();
+    } catch (err) {
+      setValue(account.alias);
+      onError(err instanceof Error ? err.message : "Could not save the alias");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <input
+      className="alias-input"
+      type="text"
+      placeholder={account.name}
+      title="Shown instead of the bank's name everywhere outside Settings"
+      value={value}
+      disabled={busy}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") setValue(account.alias);
+      }}
+    />
+  );
+}
+
 export default function SettingsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -217,6 +270,10 @@ export default function SettingsPage() {
 
       <section className="card">
         <h3>Accounts</h3>
+        <p className="muted small">
+          An alias replaces the bank's account name everywhere else in the app. Leave it
+          empty to keep the bank's name.
+        </p>
         {accounts.length === 0 ? (
           <p className="muted">No accounts yet — they appear after the first sync.</p>
         ) : (
@@ -225,6 +282,7 @@ export default function SettingsPage() {
               <tr>
                 <th>Institution</th>
                 <th>Account</th>
+                <th>Alias</th>
                 <th className="num">Balance</th>
                 <th className="num">Available</th>
                 <th>As of</th>
@@ -235,6 +293,13 @@ export default function SettingsPage() {
                 <tr key={a.id}>
                   <td>{a.org_name || "—"}</td>
                   <td>{a.name}</td>
+                  <td>
+                    <AliasInput
+                      account={a}
+                      onSaved={load}
+                      onError={(msg) => setError(msg)}
+                    />
+                  </td>
                   <td className="num nowrap">
                     <Money amount={a.balance} currency={a.currency} />
                   </td>

@@ -1,3 +1,5 @@
+import Select from "./Dropdown";
+
 function iso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
@@ -76,27 +78,18 @@ export default function DatePresets({
   onSelect: (start: string, end: string) => void;
 }) {
   return (
-    <label>
-      Quick range
-      <select
-        value=""
-        onChange={(e) => {
-          const preset = PRESETS.find((p) => p.label === e.target.value);
-          if (preset) {
-            const { start, end } = preset.range();
-            onSelect(start, end);
-          }
-        }}
-      >
-        <option value="" disabled>
-          Pick…
-        </option>
-        {PRESETS.map((p) => (
-          <option key={p.label} value={p.label}>
-            {p.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Select
+      label="Quick range"
+      value={null}
+      placeholder="Pick…"
+      options={PRESETS.map((p) => ({ value: p.label, label: p.label }))}
+      onChange={(v) => {
+        const preset = PRESETS.find((p) => p.label === v);
+        if (preset) {
+          const { start, end } = preset.range();
+          onSelect(start, end);
+        }
+      }}
+    />
   );
 }

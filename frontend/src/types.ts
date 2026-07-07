@@ -26,6 +26,9 @@ export interface Account {
   id: number;
   connection_id: number;
   name: string;
+  /** User-chosen display name; when set it replaces `name` everywhere
+   * except the Settings page. */
+  alias: string;
   org_name: string;
   currency: string;
   balance: string;

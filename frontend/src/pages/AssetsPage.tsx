@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, formatDate } from "../api";
 import { useMoney } from "../components/Money";
 import DatePresets from "../components/DatePresets";
+import useUrlFilterSync from "../components/useUrlFilterSync";
 import { AssetAccount, AssetsResponse, REFRESHED_EVENT } from "../types";
 
 const CHART_W = 900;
@@ -73,7 +74,7 @@ function dayLabel(day: string, withYear: boolean): string {
 
 export default function AssetsPage() {
   const { fmt, fmtCompact } = useMoney();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const urlInit = useRef({
     from: searchParams.get("from"),
     to: searchParams.get("to"),
@@ -156,22 +157,42 @@ export default function AssetsPage() {
 
   const selectedKey = selected ? [...selected].sort().join(",") : "";
 
-  // Mirror the state into the URL so reloads and shared links restore it.
-  useEffect(() => {
-    if (selected === null && urlInit.current.accts != null) return; // not hydrated
-    const allSelected =
-      selected === null ||
-      (knownIds.current.size > 0 && [...knownIds.current].every((k) => selected.has(k)));
-    const p = new URLSearchParams();
-    if (start !== defStart) p.set("from", start);
-    if (end !== defEnd) p.set("to", end);
-    if (selected !== null && !allSelected) {
-      p.set("accts", selected.size === 0 ? "~" : [...selected].sort().join(","));
-    }
-    if (groupByInst) p.set("grp", "1");
-    setSearchParams(p, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, selectedKey, selected === null, groupByInst]);
+  // Two-way URL sync: filter changes push history entries (so Back/Forward
+  // steps through filter states), and popping an entry re-hydrates the state.
+  useUrlFilterSync(
+    () => {
+      if (selected === null && urlInit.current.accts != null) return null; // not hydrated
+      const allSelected =
+        selected === null ||
+        (knownIds.current.size > 0 && [...knownIds.current].every((k) => selected.has(k)));
+      const p = new URLSearchParams();
+      if (start !== defStart) p.set("from", start);
+      if (end !== defEnd) p.set("to", end);
+      if (selected !== null && !allSelected) {
+        p.set("accts", selected.size === 0 ? "~" : [...selected].sort().join(","));
+      }
+      if (groupByInst) p.set("grp", "1");
+      return p;
+    },
+    (p) => {
+      setStart(p.get("from") ?? defStart);
+      setEnd(p.get("to") ?? defEnd);
+      setGroupByInst(p.get("grp") === "1");
+      const accts = p.get("accts");
+      setSelected((prev) => {
+        if (prev === null) {
+          // Accounts haven't loaded yet — leave the hydration marker for
+          // the load-time initializer to honor.
+          urlInit.current.accts = accts;
+          return prev;
+        }
+        if (accts === null) return new Set(knownIds.current);
+        if (accts === "~") return new Set();
+        return new Set(accts.split(",").filter((k) => knownIds.current.has(k)));
+      });
+    },
+    [start, end, selectedKey, selected === null, groupByInst]
+  );
 
   const toggle = (key: string) => {
     setSelected((prev) => {

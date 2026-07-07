@@ -9,8 +9,15 @@ import {
 import { useSearchParams } from "react-router-dom";
 import { api, formatDate } from "../api";
 import DatePresets from "../components/DatePresets";
+import Select, {
+  filterOptions,
+  Option,
+  OptionList,
+  usePopover,
+} from "../components/Dropdown";
 import Money, { useMoney } from "../components/Money";
 import MultiSelect from "../components/MultiSelect";
+import useUrlFilterSync from "../components/useUrlFilterSync";
 import {
   Account,
   CategoriesResponse,
@@ -18,6 +25,7 @@ import {
   REFRESHED_EVENT,
   Txn,
   TxnPage,
+  UNCATEGORIZED_COLOR,
 } from "../types";
 
 type SortField = "posted" | "amount";
@@ -25,8 +33,21 @@ type SortDir = "asc" | "desc";
 
 const PAGE_SIZE = 50;
 
+function catOptions(categories: Category[], includeNone: boolean): Option[] {
+  return [
+    ...(includeNone
+      ? [{ value: "none", label: "Uncategorized", color: UNCATEGORIZED_COLOR }]
+      : []),
+    ...categories.map((c) => ({
+      value: String(c.id),
+      label: c.emoji ? `${c.emoji} ${c.name}` : c.name,
+      color: c.color,
+    })),
+  ];
+}
+
 export default function TransactionsPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   // Snapshot of the URL at mount: it seeds the initial state, then the URL
   // follows the state (replace, no history spam).
   const urlInit = useRef({
@@ -77,7 +98,18 @@ export default function TransactionsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [addRuleOpen, setAddRuleOpen] = useState(false);
   const [addRuleBusy, setAddRuleBusy] = useState(false);
-  const addRuleRef = useRef<HTMLDivElement | null>(null);
+  // The add-substring popover: dismissal and type-to-filter.
+  const { rootRef: addRuleRef, query: addRuleQuery } = usePopover(
+    addRuleOpen,
+    () => setAddRuleOpen(false),
+    (q) => {
+      const first = filterOptions(catOptions(categories, false), q)[0];
+      const cat = first
+        ? categories.find((c) => String(c.id) === first.value)
+        : undefined;
+      if (cat) addSearchAsRule(cat);
+    }
+  );
   // Inline pickers: change one row's category (chip) or create a payee rule.
   const [picker, setPicker] = useState<
     { kind: "chip" | "payee"; txnId: number; payee?: string } | null
@@ -107,42 +139,6 @@ export default function TransactionsPage() {
     const t = window.setTimeout(() => setDebouncedQ(q), 300);
     return () => window.clearTimeout(t);
   }, [q]);
-
-  // Close the add-substring popover on outside click / Escape.
-  useEffect(() => {
-    if (!addRuleOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (addRuleRef.current && !addRuleRef.current.contains(e.target as Node)) {
-        setAddRuleOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAddRuleOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [addRuleOpen]);
-
-  // Close the inline row pickers on outside click / Escape.
-  useEffect(() => {
-    if (!picker) return;
-    const onDown = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest(".inline-pop")) setPicker(null);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPicker(null);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [picker]);
 
   // Change one transaction's category in place (marked manual server-side).
   const setRowCategory = async (txnId: number, categoryId: number | null) => {
@@ -216,24 +212,49 @@ export default function TransactionsPage() {
     categoryKeys === null || allCatsSelected ? "" : [...categoryKeys].sort().join(",");
   const noCatsSelected = categoryKeys !== null && categoryKeys.size === 0;
 
-  // Mirror the state into the URL so reloads and shared links restore it.
-  useEffect(() => {
-    if (categoryKeys === null && urlInit.current.cats != null) return; // not hydrated yet
-    const p = new URLSearchParams();
-    if (accountsKey) p.set("accounts", accountsKey);
-    if (categoryKeys !== null && !allCatsSelected) {
-      p.set("cats", categoryKeys.size === 0 ? "~" : [...categoryKeys].sort().join(","));
-    }
-    if (start) p.set("from", start);
-    if (end) p.set("to", end);
-    if (debouncedQ) p.set("q", debouncedQ);
-    if (sort !== "posted" || dir !== "desc") {
-      p.set("sort", sort);
-      p.set("dir", dir);
-    }
-    setSearchParams(p, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountsKey, categoriesKey, allCatsSelected, start, end, debouncedQ, sort, dir]);
+  // Two-way URL sync: filter changes push history entries (so Back/Forward
+  // steps through filter states), and popping an entry re-hydrates the state.
+  useUrlFilterSync(
+    () => {
+      if (categoryKeys === null && urlInit.current.cats != null) return null; // not hydrated yet
+      const p = new URLSearchParams();
+      if (accountsKey) p.set("accounts", accountsKey);
+      if (categoryKeys !== null && !allCatsSelected) {
+        p.set("cats", categoryKeys.size === 0 ? "~" : [...categoryKeys].sort().join(","));
+      }
+      if (start) p.set("from", start);
+      if (end) p.set("to", end);
+      if (debouncedQ) p.set("q", debouncedQ);
+      if (sort !== "posted" || dir !== "desc") {
+        p.set("sort", sort);
+        p.set("dir", dir);
+      }
+      return p;
+    },
+    (p) => {
+      setAccountIds(new Set(p.get("accounts")?.split(",").filter(Boolean) ?? []));
+      const cats = p.get("cats");
+      setCategoryKeys((prev) => {
+        if (prev === null) {
+          // Categories haven't loaded yet — leave the hydration marker for
+          // the load-time initializer to honor.
+          urlInit.current.cats = cats;
+          return prev;
+        }
+        if (cats === null) return new Set(knownCatKeys.current);
+        if (cats === "~") return new Set();
+        return new Set(cats.split(",").filter((k) => knownCatKeys.current.has(k)));
+      });
+      setStart(p.get("from") ?? "");
+      setEnd(p.get("to") ?? "");
+      const nextQ = p.get("q") ?? "";
+      setQ(nextQ);
+      setDebouncedQ(nextQ);
+      setSort(p.get("sort") === "amount" ? "amount" : "posted");
+      setDir(p.get("dir") === "asc" ? "asc" : "desc");
+    },
+    [accountsKey, categoriesKey, allCatsSelected, start, end, debouncedQ, sort, dir]
+  );
 
   const loadMeta = useCallback(async () => {
     try {
@@ -399,6 +420,11 @@ export default function TransactionsPage() {
   const hasFilters =
     accountIds.size > 0 || !allCatsSelected || Boolean(start || end || q);
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
+  // An alias already identifies the account to the user, so rows for
+  // aliased accounts skip the "· institution" suffix.
+  const aliasedAccountIds = new Set(
+    accounts.filter((a) => a.alias).map((a) => a.id)
+  );
 
   // Summary currency: the one shared by the accounts in view (the selected
   // subset when the account filter is active), else USD.
@@ -531,7 +557,8 @@ export default function TransactionsPage() {
           allLabel="All accounts"
           options={accounts.map((a) => ({
             value: String(a.id),
-            label: a.org_name ? `${a.org_name} — ${a.name}` : a.name,
+            label:
+              a.alias || (a.org_name ? `${a.org_name} — ${a.name}` : a.name),
           }))}
           selected={accountIds}
           onChange={setAccountIds}
@@ -540,14 +567,7 @@ export default function TransactionsPage() {
           facet
           label="Categories"
           allLabel="All categories"
-          options={[
-            { value: "none", label: "Uncategorized", color: "#9b998e" },
-            ...categories.map((c) => ({
-              value: String(c.id),
-              label: c.emoji ? `${c.emoji} ${c.name}` : c.name,
-              color: c.color,
-            })),
-          ]}
+          options={catOptions(categories, true)}
           selected={categoryKeys ?? new Set(allCatKeys)}
           onChange={setCategoryKeys}
         />
@@ -593,20 +613,14 @@ export default function TransactionsPage() {
             </button>
             {addRuleOpen && (
               <div className="msel-pop">
-                {categories.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className="msel-opt"
-                    onClick={() => addSearchAsRule(c)}
-                  >
-                    <span className="cat-dot" style={{ background: c.color }} />
-                    <span className="msel-opt-label">
-                      {c.emoji ? `${c.emoji} ` : ""}
-                      {c.name}
-                    </span>
-                  </button>
-                ))}
+                <OptionList
+                  options={catOptions(categories, false)}
+                  query={addRuleQuery}
+                  onPick={(v) => {
+                    const cat = categories.find((c) => String(c.id) === v);
+                    if (cat) addSearchAsRule(cat);
+                  }}
+                />
               </div>
             )}
           </div>
@@ -644,14 +658,11 @@ export default function TransactionsPage() {
           <span>
             {selected.size} selected
           </span>
-          <select value={batchCategory} onChange={(e) => setBatchCategory(e.target.value)}>
-            <option value="none">Uncategorized</option>
-            {categories.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.emoji ? `${c.emoji} ${c.name}` : c.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            value={batchCategory}
+            options={catOptions(categories, true)}
+            onChange={setBatchCategory}
+          />
           <button
             className="btn btn-primary"
             disabled={batchBusy}
@@ -752,7 +763,9 @@ export default function TransactionsPage() {
                   <td className="nowrap">{formatDate(t.posted)}</td>
                   <td className="nowrap">
                     <span className="acct-name">{t.account_name}</span>
-                    {t.org_name && <span className="muted small"> · {t.org_name}</span>}
+                    {t.org_name && !aliasedAccountIds.has(t.account_id) && (
+                      <span className="muted small"> · {t.org_name}</span>
+                    )}
                   </td>
                   <td>
                     {maskText(t.description || t.payee || "(no description)")}
@@ -781,6 +794,7 @@ export default function TransactionsPage() {
                                   const cat = categories.find((c) => c.id === id);
                                   if (cat && picker.payee) addPayeeRule(picker.payee, cat);
                                 }}
+                                onClose={() => setPicker(null)}
                               />
                             )}
                           </span>
@@ -820,6 +834,7 @@ export default function TransactionsPage() {
                         categories={categories}
                         includeUncategorized
                         onPick={(id) => setRowCategory(t.id, id)}
+                        onClose={() => setPicker(null)}
                       />
                     )}
                   </td>
@@ -857,39 +872,32 @@ function InlinePicker({
   categories,
   includeUncategorized,
   onPick,
+  onClose,
 }: {
   title: string;
   categories: Category[];
   includeUncategorized: boolean;
   onPick: (categoryId: number | null) => void;
+  onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement | null>(null);
+  const options = catOptions(categories, includeUncategorized);
+  const pick = (v: string) => onPick(v === "none" ? null : Number(v));
+  const { rootRef, query } = usePopover(true, onClose, (q) => {
+    const first = filterOptions(options, q)[0];
+    if (first) pick(first.value);
+  });
   const [openUp, setOpenUp] = useState(false);
   // Flip upward when the popover would poke below the viewport.
   useLayoutEffect(() => {
-    const el = ref.current;
+    const el = rootRef.current;
     if (el && el.getBoundingClientRect().bottom > window.innerHeight - 8) {
       setOpenUp(true);
     }
-  }, []);
+  }, [rootRef]);
   return (
-    <div ref={ref} className={`msel-pop inline-pop${openUp ? " inline-pop-up" : ""}`}>
+    <div ref={rootRef} className={`msel-pop inline-pop${openUp ? " inline-pop-up" : ""}`}>
       <div className="inline-pop-title">{title}</div>
-      {includeUncategorized && (
-        <button type="button" className="msel-opt" onClick={() => onPick(null)}>
-          <span className="cat-dot" style={{ background: "#9b998e" }} />
-          <span className="msel-opt-label">Uncategorized</span>
-        </button>
-      )}
-      {categories.map((c) => (
-        <button type="button" key={c.id} className="msel-opt" onClick={() => onPick(c.id)}>
-          <span className="cat-dot" style={{ background: c.color }} />
-          <span className="msel-opt-label">
-            {c.emoji ? `${c.emoji} ` : ""}
-            {c.name}
-          </span>
-        </button>
-      ))}
+      <OptionList options={options} query={query} onPick={pick} />
     </div>
   );
 }
@@ -974,17 +982,12 @@ function EditRow({
               Memo
               <input value={memo} onChange={(e) => setMemo(e.target.value)} />
             </label>
-            <label>
-              Category
-              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="none">Uncategorized</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.emoji ? `${c.emoji} ${c.name}` : c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Select
+              label="Category"
+              value={categoryId}
+              options={catOptions(categories, true)}
+              onChange={setCategoryId}
+            />
           </div>
           {error && <div className="alert alert-error">{error}</div>}
           <div className="edit-actions">

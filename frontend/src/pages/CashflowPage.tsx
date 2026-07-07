@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMoney } from "../components/Money";
 import DatePresets from "../components/DatePresets";
+import Select from "../components/Dropdown";
+import useUrlFilterSync from "../components/useUrlFilterSync";
 import { Account, CashflowResponse, REFRESHED_EVENT } from "../types";
 
 type Granularity = "day" | "week" | "month" | "year";
@@ -48,7 +50,7 @@ function bucketLabel(bucket: string, granularity: Granularity): string {
 
 export default function CashflowPage() {
   const { fmt, fmtCompact } = useMoney();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const urlInit = useRef({
     from: searchParams.get("from"),
     to: searchParams.get("to"),
@@ -93,15 +95,24 @@ export default function CashflowPage() {
     loadAccounts();
   }, [loadAccounts]);
 
-  // Mirror the state into the URL so reloads and shared links restore it.
-  useEffect(() => {
-    const p = new URLSearchParams();
-    if (start !== defStart) p.set("from", start);
-    if (end !== defEnd) p.set("to", end);
-    if (granularity !== "month") p.set("g", granularity);
-    setSearchParams(p, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, granularity]);
+  // Two-way URL sync: filter changes push history entries (so Back/Forward
+  // steps through filter states), and popping an entry re-hydrates the state.
+  useUrlFilterSync(
+    () => {
+      const p = new URLSearchParams();
+      if (start !== defStart) p.set("from", start);
+      if (end !== defEnd) p.set("to", end);
+      if (granularity !== "month") p.set("g", granularity);
+      return p;
+    },
+    (p) => {
+      setStart(p.get("from") ?? defStart);
+      setEnd(p.get("to") ?? defEnd);
+      const g = p.get("g");
+      setGranularity(g === "day" || g === "week" || g === "year" ? g : "month");
+    },
+    [start, end, granularity]
+  );
 
   const loadCashflow = useCallback(async () => {
     // Skip fetches for half-typed dates (typing a year fires per-keystroke
@@ -183,18 +194,17 @@ export default function CashflowPage() {
             setEnd(e);
           }}
         />
-        <label>
-          Group by
-          <select
-            value={granularity}
-            onChange={(e) => setGranularity(e.target.value as Granularity)}
-          >
-            <option value="month">Month</option>
-            <option value="week">Week</option>
-            <option value="day">Day</option>
-            <option value="year">Year</option>
-          </select>
-        </label>
+        <Select
+          label="Group by"
+          value={granularity}
+          options={[
+            { value: "month", label: "Month" },
+            { value: "week", label: "Week" },
+            { value: "day", label: "Day" },
+            { value: "year", label: "Year" },
+          ]}
+          onChange={(v) => setGranularity(v as Granularity)}
+        />
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

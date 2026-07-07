@@ -119,6 +119,10 @@ class Account(Base):
     simplefin_id: Mapped[str] = mapped_column(String)
 
     name: Mapped[str] = mapped_column(String, default="")
+    # User-chosen display name. When set it replaces `name` everywhere in the
+    # app except the Settings page (which must show the bank's own name).
+    # Sync never touches it.
+    alias: Mapped[str] = mapped_column(String, default="")
     org_name: Mapped[str] = mapped_column(String, default="")
     org_domain: Mapped[str] = mapped_column(String, default="")
     currency: Mapped[str] = mapped_column(String, default="USD")

@@ -186,19 +186,42 @@ def list_accounts(user: User = Depends(get_current_user), db: Session = Depends(
         .order_by(Account.org_name, Account.name)
         .all()
     )
-    return [
-        {
-            "id": a.id,
-            "connection_id": a.connection_id,
-            "name": a.name,
-            "org_name": a.org_name,
-            "currency": a.currency,
-            "balance": a.balance,
-            "available_balance": a.available_balance,
-            "balance_date": a.balance_date,
-        }
-        for a in accounts
-    ]
+    return [_account_json(a) for a in accounts]
+
+
+def _account_json(a: Account) -> dict:
+    # `name` stays the bank's own name (Settings shows it); every other page
+    # displays `alias` when set.
+    return {
+        "id": a.id,
+        "connection_id": a.connection_id,
+        "name": a.name,
+        "alias": a.alias or "",
+        "org_name": a.org_name,
+        "currency": a.currency,
+        "balance": a.balance,
+        "available_balance": a.available_balance,
+        "balance_date": a.balance_date,
+    }
+
+
+class AccountPatch(BaseModel):
+    alias: str
+
+
+@router.patch("/accounts/{account_id}")
+def update_account(
+    account_id: int,
+    body: AccountPatch,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    acct = db.get(Account, account_id)
+    if acct is None or acct.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Account not found")
+    acct.alias = body.alias.strip()
+    db.commit()
+    return _account_json(acct)
 
 
 @router.get("/assets")
@@ -280,7 +303,7 @@ def assets(
         "accounts": [
             {
                 "id": a.id,
-                "name": a.name,
+                "name": a.alias or a.name,
                 "org_name": a.org_name,
                 "currency": a.currency,
                 "balance": a.balance,
@@ -660,28 +683,7 @@ def list_transactions(
         if page_account_ids
         else {}
     )
-    items = []
-    for t in rows:
-        acct = accounts_by_id.get(t.account_id)
-        items.append(
-            {
-                "id": t.id,
-                "account_id": t.account_id,
-                "account_name": acct.name if acct else "",
-                "org_name": acct.org_name if acct else "",
-                "currency": acct.currency if acct else "USD",
-                "posted": t.posted,
-                "amount": t.amount,
-                "amount_str": t.amount_str,
-                "description": t.description,
-                "payee": t.payee,
-                "memo": t.memo,
-                "pending": t.pending,
-                "category_id": t.category_id,
-                "category_manual": t.category_manual,
-                "edited": t.edited,
-            }
-        )
+    items = [_txn_json(t, accounts_by_id.get(t.account_id)) for t in rows]
     return {
         "items": items,
         "total": total,
@@ -697,7 +699,7 @@ def _txn_json(t: Transaction, acct: Account | None) -> dict:
     return {
         "id": t.id,
         "account_id": t.account_id,
-        "account_name": acct.name if acct else "",
+        "account_name": (acct.alias or acct.name) if acct else "",
         "org_name": acct.org_name if acct else "",
         "currency": acct.currency if acct else "USD",
         "posted": t.posted,
