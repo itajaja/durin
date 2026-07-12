@@ -71,11 +71,13 @@ export default function SettingsPage() {
     try {
       const [conns, accts] = await Promise.all([
         api<Connection[]>("/api/connections"),
-        api<Account[]>("/api/accounts"),
+        api<Account[]>("/api/accounts?include_disabled=1"),
       ]);
       if (!alive.current) return [];
       setConnections(conns);
-      setAccounts(accts);
+      // The built frontend goes live before the backend restarts, so an
+      // older backend may not send `enabled` yet — treat missing as on.
+      setAccounts(accts.map((a) => ({ ...a, enabled: a.enabled ?? true })));
       return conns;
     } catch (err) {
       if (alive.current) {
@@ -154,6 +156,30 @@ export default function SettingsPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
+  const toggleAccount = async (a: Account) => {
+    if (
+      a.enabled &&
+      !window.confirm(
+        `Turn off "${a.alias || a.name}"? All of its transactions and balance history ` +
+          `will be deleted, and it will disappear everywhere outside Settings. You can ` +
+          `turn it back on later and its data will re-sync.`
+      )
+    ) {
+      return;
+    }
+    setError("");
+    try {
+      await api(`/api/accounts/${a.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: !a.enabled }),
+      });
+      // Turning an account back on starts a background sync; poll it.
+      scheduleRefresh(await load());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update the account");
     }
   };
 
@@ -272,7 +298,9 @@ export default function SettingsPage() {
         <h3>Accounts</h3>
         <p className="muted small">
           An alias replaces the bank's account name everywhere else in the app. Leave it
-          empty to keep the bank's name.
+          empty to keep the bank's name. Turning an account off deletes its transactions
+          and balance history and hides it everywhere outside this page; turning it back
+          on re-syncs its data.
         </p>
         {accounts.length === 0 ? (
           <p className="muted">No accounts yet — they appear after the first sync.</p>
@@ -286,13 +314,17 @@ export default function SettingsPage() {
                 <th className="num">Balance</th>
                 <th className="num">Available</th>
                 <th>As of</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {accounts.map((a) => (
-                <tr key={a.id}>
+                <tr key={a.id} className={a.enabled ? undefined : "row-off"}>
                   <td>{a.org_name || "—"}</td>
-                  <td>{a.name}</td>
+                  <td>
+                    {a.name}
+                    {!a.enabled && <span className="badge">off</span>}
+                  </td>
                   <td>
                     <AliasInput
                       account={a}
@@ -311,6 +343,14 @@ export default function SettingsPage() {
                     )}
                   </td>
                   <td className="nowrap">{formatDateTime(a.balance_date)}</td>
+                  <td className="nowrap actions">
+                    <button
+                      className={a.enabled ? "btn btn-danger" : "btn btn-quiet"}
+                      onClick={() => toggleAccount(a)}
+                    >
+                      {a.enabled ? "Turn off" : "Turn on"}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

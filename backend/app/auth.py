@@ -1,6 +1,9 @@
 import base64
 import json
 import secrets
+import smtplib
+import time
+from email.message import EmailMessage
 from urllib.parse import urlencode
 
 import httpx
@@ -19,6 +22,10 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SESSION_COOKIE = "durin_session"
 _session_signer = URLSafeTimedSerializer(settings.secret_key, salt="durin-session")
 _state_signer = URLSafeTimedSerializer(settings.secret_key, salt="durin-oauth-state")
+_magic_signer = URLSafeTimedSerializer(settings.secret_key, salt="durin-magic-link")
+
+MAGIC_LINK_MAX_AGE = 15 * 60
+MAGIC_LINK_RESEND_SECONDS = 60
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -74,6 +81,7 @@ def _upsert_user(
 def auth_config():
     return {
         "google_enabled": settings.google_enabled,
+        "magic_link_enabled": settings.magic_link_enabled,
         "dev_login_enabled": settings.dev_login,
     }
 
@@ -95,6 +103,79 @@ def dev_login(body: DevLoginRequest, response: Response, db: Session = Depends(g
     user = _upsert_user(db, email, name=body.name or email.split("@")[0])
     set_session_cookie(response, user.id)
     return {"ok": True, "email": user.email}
+
+
+def _send_magic_link_email(email: str, link: str) -> None:
+    msg = EmailMessage()
+    msg["From"] = settings.smtp_user
+    msg["To"] = email
+    msg["Subject"] = "Sign in to Durin"
+    msg.set_content(
+        f"Click this link to sign in to Durin:\n\n{link}\n\n"
+        "It expires in 15 minutes. If you didn't request it, you can ignore this email."
+    )
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:
+        smtp.starttls()
+        smtp.login(settings.smtp_user, settings.smtp_pass)
+        smtp.send_message(msg)
+
+
+class MagicLinkRequest(BaseModel):
+    email: str
+
+
+# Last send time per email, to keep double-clicks from double-sending. In-process
+# only, which is fine for a single-worker app.
+_magic_last_sent: dict[str, float] = {}
+
+
+@router.post("/magic/request")
+def magic_link_request(body: MagicLinkRequest):
+    if not settings.magic_link_enabled:
+        raise HTTPException(status_code=404, detail="Email sign-in is not configured")
+    email = body.email.strip().lower()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+    # Check the allowlist before sending so we never email strangers.
+    if not settings.email_allowed(email):
+        raise HTTPException(status_code=403, detail=f"{email} is not on the allowlist")
+    last = _magic_last_sent.get(email)
+    if last is not None and time.monotonic() - last < MAGIC_LINK_RESEND_SECONDS:
+        raise HTTPException(
+            status_code=429,
+            detail="A link was just sent — check your inbox, or retry in a minute",
+        )
+    token = _magic_signer.dumps({"email": email})
+    link = f"{settings.app_url}/api/auth/magic/verify?token={token}"
+    try:
+        _send_magic_link_email(email, link)
+    except (smtplib.SMTPException, OSError):
+        raise HTTPException(status_code=502, detail="Could not send the email — try again")
+    _magic_last_sent[email] = time.monotonic()
+    return {"ok": True}
+
+
+@router.get("/magic/verify")
+def magic_link_verify(token: str = "", db: Session = Depends(get_db)):
+    if not settings.magic_link_enabled:
+        raise HTTPException(status_code=404, detail="Email sign-in is not configured")
+    try:
+        payload = _magic_signer.loads(token, max_age=MAGIC_LINK_MAX_AGE)
+    except SignatureExpired:
+        return RedirectResponse("/login?error=magic_expired")
+    except BadSignature:
+        return RedirectResponse("/login?error=magic_invalid")
+    email = (payload.get("email") or "").strip().lower()
+    # Re-check in case the allowlist changed after the link was issued.
+    if not email or not settings.email_allowed(email):
+        return RedirectResponse("/login?error=not_allowed")
+    user = _upsert_user(db, email)
+    if not user.name:
+        user.name = email.split("@")[0]
+        db.commit()
+    response = RedirectResponse("/")
+    set_session_cookie(response, user.id)
+    return response
 
 
 OAUTH_NONCE_COOKIE = "durin_oauth_nonce"

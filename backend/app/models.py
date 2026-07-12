@@ -123,6 +123,10 @@ class Account(Base):
     # app except the Settings page (which must show the bank's own name).
     # Sync never touches it.
     alias: Mapped[str] = mapped_column(String, default="")
+    # Turned-off accounts exist only on the Settings page. Turning one off
+    # deletes its transactions and balance snapshots, and sync stops
+    # ingesting them; turning it back on re-syncs full history.
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     org_name: Mapped[str] = mapped_column(String, default="")
     org_domain: Mapped[str] = mapped_column(String, default="")
     currency: Mapped[str] = mapped_column(String, default="USD")

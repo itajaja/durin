@@ -26,6 +26,11 @@ class Settings:
     google_client_id: str = os.environ.get("GOOGLE_CLIENT_ID", "")
     google_client_secret: str = os.environ.get("GOOGLE_CLIENT_SECRET", "")
     dev_login: bool = _bool("DEV_LOGIN", False)
+    smtp_host: str = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port: int = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_user: str = os.environ.get("SMTP_USER", "")
+    # Gmail shows app passwords with spaces; accept the value pasted either way.
+    smtp_pass: str = os.environ.get("SMTP_PASS", "").replace(" ", "")
     allowed_emails: list[str] = [
         e.strip().lower() for e in os.environ.get("ALLOWED_EMAILS", "").split(",") if e.strip()
     ]
@@ -41,6 +46,10 @@ class Settings:
     @property
     def google_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def magic_link_enabled(self) -> bool:
+        return bool(self.smtp_user and self.smtp_pass)
 
     def email_allowed(self, email: str) -> bool:
         if not self.allowed_emails:

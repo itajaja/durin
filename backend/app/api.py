@@ -179,13 +179,17 @@ def sync_status(user: User = Depends(get_current_user), db: Session = Depends(ge
 
 
 @router.get("/accounts")
-def list_accounts(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    accounts = (
-        db.query(Account)
-        .filter(Account.user_id == user.id)
-        .order_by(Account.org_name, Account.name)
-        .all()
-    )
+def list_accounts(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    include_disabled: bool = Query(default=False),
+):
+    q = db.query(Account).filter(Account.user_id == user.id)
+    if not include_disabled:
+        # Turned-off accounts are invisible everywhere except Settings,
+        # which is the only caller passing include_disabled.
+        q = q.filter(Account.enabled.is_(True))
+    accounts = q.order_by(Account.org_name, Account.name).all()
     return [_account_json(a) for a in accounts]
 
 
@@ -202,11 +206,13 @@ def _account_json(a: Account) -> dict:
         "balance": a.balance,
         "available_balance": a.available_balance,
         "balance_date": a.balance_date,
+        "enabled": a.enabled,
     }
 
 
 class AccountPatch(BaseModel):
-    alias: str
+    alias: str | None = None
+    enabled: bool | None = None
 
 
 @router.patch("/accounts/{account_id}")
@@ -219,8 +225,33 @@ def update_account(
     acct = db.get(Account, account_id)
     if acct is None or acct.user_id != user.id:
         raise HTTPException(status_code=404, detail="Account not found")
-    acct.alias = body.alias.strip()
+    if body.alias is not None:
+        acct.alias = body.alias.strip()
+    resync = False
+    if body.enabled is not None and body.enabled != acct.enabled:
+        if not body.enabled:
+            # A concurrent sync could re-insert rows between our delete and
+            # the enabled flip landing; refuse rather than race it.
+            if sync.is_syncing(acct.connection_id):
+                raise HTTPException(
+                    status_code=409,
+                    detail="This account's connection is syncing; try again shortly",
+                )
+            db.query(Transaction).filter(Transaction.account_id == acct.id).delete(
+                synchronize_session=False
+            )
+            db.query(BalanceSnapshot).filter(
+                BalanceSnapshot.account_id == acct.id
+            ).delete(synchronize_session=False)
+        else:
+            resync = True
+        acct.enabled = body.enabled
     db.commit()
+    if resync:
+        # The wipe on turn-off means an incremental sync would restore only
+        # a few days — refetch the connection's full history (idempotent for
+        # its other accounts).
+        sync.sync_connection_in_background(acct.connection_id, full_history=True)
     return _account_json(acct)
 
 
@@ -295,7 +326,7 @@ def assets(
 
     accts = (
         db.query(Account)
-        .filter(Account.user_id == user.id)
+        .filter(Account.user_id == user.id, Account.enabled.is_(True))
         .order_by(Account.org_name, Account.name)
         .all()
     )

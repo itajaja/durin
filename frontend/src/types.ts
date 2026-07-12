@@ -7,6 +7,7 @@ export interface User {
 
 export interface AuthConfig {
   google_enabled: boolean;
+  magic_link_enabled: boolean;
   dev_login_enabled: boolean;
 }
 
@@ -34,6 +35,9 @@ export interface Account {
   balance: string;
   available_balance: string | null;
   balance_date: number | null;
+  /** Turned-off accounts only appear on the Settings page; their data is
+   * deleted and sync skips them until turned back on. */
+  enabled: boolean;
 }
 
 export interface CategoryRule {

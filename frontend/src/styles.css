@@ -692,17 +692,27 @@ th.sortable:hover {
   transform: translateY(-1px);
 }
 
-.dev-login {
+.dev-login,
+.magic-login {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.dev-login label {
+.dev-login label,
+.magic-login label {
   font-size: 0.67rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #6b7280;
+}
+
+.magic-sent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: #9aa1ab;
 }
 
 .login-wrap input {
@@ -1327,6 +1337,16 @@ code {
 .alias-input::placeholder {
   font-style: italic;
   opacity: 0.5;
+}
+
+/* Turned-off account rows in Settings: present but visibly dormant. */
+tr.row-off td {
+  opacity: 0.45;
+}
+
+tr.row-off td.actions,
+tr.row-off td:last-child {
+  opacity: 1;
 }
 
 /* ---- categories page ---- */

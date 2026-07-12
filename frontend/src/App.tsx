@@ -216,12 +216,13 @@ export default function App() {
                 <input type="checkbox" checked={discrete} readOnly tabIndex={-1} />
                 <span className="msel-opt-label">Discrete mode (mask amounts)</span>
               </button>
+              <button type="button" className="msel-opt" role="menuitem" onClick={logout}>
+                <span className="menu-icon">⏻</span>
+                <span className="msel-opt-label">Sign out</span>
+              </button>
             </div>
           )}
         </div>
-        <button className="btn btn-quiet" onClick={logout}>
-          Sign out
-        </button>
       </header>
       {syncNote && <div className="sync-note">{syncNote}</div>}
       <main>

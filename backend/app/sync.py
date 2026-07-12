@@ -144,7 +144,8 @@ def _upsert_account(db: Session, conn: Connection, payload: dict) -> tuple[Accou
         except (TypeError, ValueError):
             pass
     db.flush()
-    _record_balance_snapshot(db, account)
+    if account.enabled:
+        _record_balance_snapshot(db, account)
     return account, created
 
 
@@ -304,6 +305,10 @@ def _ingest(
     for acct_payload in data.get("accounts", []):
         account, created = _upsert_account(db, conn, acct_payload)
         new_accounts = new_accounts or created
+        if not account.enabled:
+            # Turned off: the account row keeps tracking bank metadata (the
+            # Settings page shows it), but no history may accumulate.
+            continue
         a, u = _upsert_transactions(
             db,
             account,
@@ -316,7 +321,7 @@ def _ingest(
     return added, updated, new_accounts
 
 
-def _do_sync(connection_id: int) -> None:
+def _do_sync(connection_id: int, full_history: bool = False) -> None:
     """Blocking sync of one connection. Runs in a worker thread."""
     db = SessionLocal()
     try:
@@ -334,8 +339,10 @@ def _do_sync(connection_id: int) -> None:
         conn.last_sync_at = now_ts()
         db.commit()
 
-        start_date = _sync_start_date(db, conn)
         horizon = now_ts() - settings.history_days * 86400
+        # full_history: a just-re-enabled account starts from an empty slate,
+        # so the incremental window would leave it with days, not months.
+        start_date = horizon if full_history else _sync_start_date(db, conn)
         try:
             data = fetch_accounts(conn.access_url, start_date=start_date)
         except SimpleFinError as exc:
@@ -429,22 +436,26 @@ def _do_sync(connection_id: int) -> None:
         db.close()
 
 
-async def sync_connection(connection_id: int) -> bool:
+async def sync_connection(connection_id: int, full_history: bool = False) -> bool:
     """Sync one connection unless it is already being synced."""
     if not _try_begin(connection_id):
         return False
     try:
-        await asyncio.to_thread(_do_sync, connection_id)
+        await asyncio.to_thread(_do_sync, connection_id, full_history)
     finally:
         _end(connection_id)
     return True
 
 
-def sync_connection_in_background(connection_id: int) -> bool:
+def sync_connection_in_background(connection_id: int, full_history: bool = False) -> bool:
     """Fire-and-forget sync from a request handler (worker thread)."""
     if _main_loop is None or is_syncing(connection_id):
         return False
-    _retain(asyncio.run_coroutine_threadsafe(sync_connection(connection_id), _main_loop))
+    _retain(
+        asyncio.run_coroutine_threadsafe(
+            sync_connection(connection_id, full_history), _main_loop
+        )
+    )
     return True
 
 

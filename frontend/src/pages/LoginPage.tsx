@@ -3,9 +3,11 @@ import { api, ApiError } from "../api";
 import { AuthConfig } from "../types";
 
 const ERROR_MESSAGES: Record<string, string> = {
-  not_allowed: "That Google account is not on the allowlist (ALLOWED_EMAILS in .env).",
+  not_allowed: "That email is not on the allowlist (ALLOWED_EMAILS in .env).",
   unverified_email: "Google reported that email as unverified.",
   access_denied: "Google sign-in was cancelled.",
+  magic_expired: "That sign-in link expired — request a new one below.",
+  magic_invalid: "That sign-in link is invalid — request a new one below.",
 };
 
 /* Stable field of rising gold dust (seeded, so it never re-rolls on
@@ -54,6 +56,9 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [magicEmail, setMagicEmail] = useState("");
+  const [magicBusy, setMagicBusy] = useState(false);
+  const [magicSentTo, setMagicSentTo] = useState("");
   const [torch, setTorch] = useState<{ x: number; y: number } | null>(null);
   const raf = useRef<number | null>(null);
   const pending = useRef<{ x: number; y: number } | null>(null);
@@ -79,6 +84,23 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
         raf.current = null;
         if (pending.current) setTorch(pending.current);
       });
+    }
+  };
+
+  const sendMagicLink = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setMagicBusy(true);
+    try {
+      await api("/api/auth/magic/request", {
+        method: "POST",
+        body: JSON.stringify({ email: magicEmail }),
+      });
+      setMagicSentTo(magicEmail);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not send the link");
+    } finally {
+      setMagicBusy(false);
     }
   };
 
@@ -140,9 +162,43 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
             </a>
           )}
 
+          {config?.magic_link_enabled && (
+            <>
+              {config.google_enabled && <div className="divider">or</div>}
+              {magicSentTo ? (
+                <div className="magic-sent">
+                  <p>
+                    Sign-in link sent to <strong>{magicSentTo}</strong>. Check your
+                    inbox — it expires in 15 minutes.
+                  </p>
+                  <button type="button" className="btn" onClick={() => setMagicSentTo("")}>
+                    Use a different email
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={sendMagicLink} className="magic-login">
+                  <label htmlFor="magic-email">Sign in by email</label>
+                  <input
+                    id="magic-email"
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    value={magicEmail}
+                    onChange={(e) => setMagicEmail(e.target.value)}
+                  />
+                  <button className="btn btn-primary" disabled={magicBusy || !magicEmail}>
+                    {magicBusy ? "Sending…" : "Email me a sign-in link"}
+                  </button>
+                </form>
+              )}
+            </>
+          )}
+
           {config?.dev_login_enabled && (
             <form onSubmit={devLogin} className="dev-login">
-              {config.google_enabled && <div className="divider">or</div>}
+              {(config.google_enabled || config.magic_link_enabled) && (
+                <div className="divider">or</div>
+              )}
               <label htmlFor="dev-email">Dev login (local only)</label>
               <input
                 id="dev-email"
@@ -158,12 +214,15 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
             </form>
           )}
 
-          {config && !config.google_enabled && !config.dev_login_enabled && (
-            <div className="alert alert-error">
-              No sign-in method is configured. Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or
-              DEV_LOGIN=true in .env, then restart.
-            </div>
-          )}
+          {config &&
+            !config.google_enabled &&
+            !config.magic_link_enabled &&
+            !config.dev_login_enabled && (
+              <div className="alert alert-error">
+                No sign-in method is configured. Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET,
+                SMTP_USER/SMTP_PASS, or DEV_LOGIN=true in .env, then restart.
+              </div>
+            )}
         </div>
       </div>
     </div>

@@ -56,6 +56,8 @@ def _migrate(eng) -> None:
         acct_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(accounts)")]
         if "alias" not in acct_cols:
             conn.exec_driver_sql("ALTER TABLE accounts ADD COLUMN alias VARCHAR DEFAULT ''")
+        if "enabled" not in acct_cols:
+            conn.exec_driver_sql("ALTER TABLE accounts ADD COLUMN enabled BOOLEAN DEFAULT 1")
         conn.commit()
 
         # Categories became per-user (they were briefly global, sourced from
