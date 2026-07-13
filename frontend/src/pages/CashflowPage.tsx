@@ -220,14 +220,28 @@ export default function CashflowPage() {
       ) : data ? (
         <div className="chart-wrap card">
           <div className="summary muted">
-            Total net:{" "}
-            <strong className={data.total_net < 0 ? "neg" : "pos"}>
-              {fmt(data.total_net, currency)}
-            </strong>{" "}
-            · avg/month{" "}
-            <strong className={data.avg_net_month < 0 ? "neg" : "pos"}>
-              {fmt(data.avg_net_month, currency)}
-            </strong>
+            <div>
+              Total income:{" "}
+              <strong className="pos">{fmt(data.total_income, currency)}</strong> ·
+              avg/month{" "}
+              <strong className="pos">{fmt(data.avg_income_month, currency)}</strong>
+            </div>
+            <div>
+              Total spending:{" "}
+              <strong className="neg">{fmt(data.total_spending, currency)}</strong> ·
+              avg/month{" "}
+              <strong className="neg">{fmt(data.avg_spending_month, currency)}</strong>
+            </div>
+            <div>
+              Total net:{" "}
+              <strong className={data.total_net < 0 ? "neg" : "pos"}>
+                {fmt(data.total_net, currency)}
+              </strong>{" "}
+              · avg/month{" "}
+              <strong className={data.avg_net_month < 0 ? "neg" : "pos"}>
+                {fmt(data.avg_net_month, currency)}
+              </strong>
+            </div>
           </div>
           <div className="chart-scroll">
             <div className="chart-inner">

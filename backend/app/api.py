@@ -1193,5 +1193,7 @@ def cashflow(
         "total_income": total_income,
         "total_spending": total_spending,
         "total_net": total_net,
+        "avg_income_month": round(total_income / months_span, 2),
+        "avg_spending_month": round(total_spending / months_span, 2),
         "avg_net_month": round(total_net / months_span, 2),
     }

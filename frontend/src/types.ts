@@ -104,6 +104,8 @@ export interface CashflowResponse {
   total_income: number;
   total_spending: number;
   total_net: number;
+  avg_income_month: number;
+  avg_spending_month: number;
   avg_net_month: number;
 }
 
