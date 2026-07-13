@@ -53,7 +53,12 @@ export interface Category {
   name: string;
   emoji: string;
   color: string;
+  /** Not real spending (transfers, card payments): excluded from Spending
+   * and from Cash flow entirely. */
   is_transaction: boolean;
+  /** Real income (salary…): excluded from Spending; the only thing Cash
+   * flow counts as income. */
+  is_income: boolean;
   txn_count: number;
   rules: CategoryRule[];
 }
@@ -169,10 +174,9 @@ export interface Vendor {
   spend: number;
   income: number;
   avg_month: number;
-  /** What the rules would assign this vendor's transactions today. */
-  auto_category_id: number | null;
   /** The vendor's own exact rule, when one exists — the thing the page
-   * edits and removes. */
+   * edits and removes. Categories inherited from substring rules are not
+   * reported. */
   rule_id: number | null;
   rule_category_id: number | null;
 }

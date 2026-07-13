@@ -182,6 +182,7 @@ function NewCategoryForm({
   const [emoji, setEmoji] = useState("");
   const [color, setColor] = useState(CATEGORY_COLORS[0]);
   const [isTransaction, setIsTransaction] = useState(false);
+  const [isIncome, setIsIncome] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const openForm = () => {
@@ -198,11 +199,18 @@ function NewCategoryForm({
     try {
       const created = await api<Category>("/api/categories", {
         method: "POST",
-        body: JSON.stringify({ name, emoji, color, is_transaction: isTransaction }),
+        body: JSON.stringify({
+          name,
+          emoji,
+          color,
+          is_transaction: isTransaction,
+          is_income: isIncome,
+        }),
       });
       setName("");
       setEmoji("");
       setIsTransaction(false);
+      setIsIncome(false);
       setOpen(false);
       onCreated(created);
     } catch (err) {
@@ -241,9 +249,23 @@ function NewCategoryForm({
           <input
             type="checkbox"
             checked={isTransaction}
-            onChange={(e) => setIsTransaction(e.target.checked)}
+            onChange={(e) => {
+              setIsTransaction(e.target.checked);
+              if (e.target.checked) setIsIncome(false);
+            }}
           />
           Not spending (transfers, card payments…)
+        </label>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={isIncome}
+            onChange={(e) => {
+              setIsIncome(e.target.checked);
+              if (e.target.checked) setIsTransaction(false);
+            }}
+          />
+          Income (salary, interest…)
         </label>
       </div>
       <div className="swatch-field">
@@ -277,6 +299,7 @@ function CategoryCard({
   const [emoji, setEmoji] = useState(category.emoji);
   const [color, setColor] = useState(category.color);
   const [isTransaction, setIsTransaction] = useState(category.is_transaction);
+  const [isIncome, setIsIncome] = useState(category.is_income);
   const [busy, setBusy] = useState(false);
 
   const [newSub, setNewSub] = useState("");
@@ -314,7 +337,13 @@ function CategoryCard({
     try {
       await api(`/api/categories/${category.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name, emoji, color, is_transaction: isTransaction }),
+        body: JSON.stringify({
+          name,
+          emoji,
+          color,
+          is_transaction: isTransaction,
+          is_income: isIncome,
+        }),
       });
       setEditing(false);
       onChanged(`Updated ${name}.`);
@@ -419,9 +448,23 @@ function CategoryCard({
               <input
                 type="checkbox"
                 checked={isTransaction}
-                onChange={(e) => setIsTransaction(e.target.checked)}
+                onChange={(e) => {
+                  setIsTransaction(e.target.checked);
+                  if (e.target.checked) setIsIncome(false);
+                }}
               />
               Not spending
+            </label>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={isIncome}
+                onChange={(e) => {
+                  setIsIncome(e.target.checked);
+                  if (e.target.checked) setIsTransaction(false);
+                }}
+              />
+              Income
             </label>
           </div>
           <div className="swatch-field">
@@ -445,6 +488,7 @@ function CategoryCard({
                 setEmoji(category.emoji);
                 setColor(category.color);
                 setIsTransaction(category.is_transaction);
+                setIsIncome(category.is_income);
               }}
             >
               Cancel
@@ -465,6 +509,7 @@ function CategoryCard({
             {category.txn_count} transaction{category.txn_count === 1 ? "" : "s"}
           </span>
           {category.is_transaction && <span className="badge">not spending</span>}
+          {category.is_income && <span className="badge">income</span>}
           <div className="spacer" />
           <button className="btn btn-quiet btn-small" onClick={() => setEditing(true)}>
             Edit

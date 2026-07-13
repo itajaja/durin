@@ -429,8 +429,8 @@ export default function VendorsPage() {
           ) : (
             shown.map((v) => {
               const cat =
-                v.auto_category_id != null
-                  ? categoriesById.get(v.auto_category_id)
+                v.rule_category_id != null
+                  ? categoriesById.get(v.rule_category_id)
                   : undefined;
               return (
                 <tr key={v.key}>
@@ -460,9 +460,7 @@ export default function VendorsPage() {
                         title={
                           v.rule_id != null
                             ? "This vendor has its own rule — click to change or remove it"
-                            : cat
-                              ? "Categorized by a substring rule — click to give this vendor its own"
-                              : "Set an automatic category for this vendor"
+                            : "Set an automatic category for this vendor"
                         }
                         onClick={() => setPickerKey(pickerKey === v.key ? null : v.key)}
                       >
@@ -471,7 +469,6 @@ export default function VendorsPage() {
                             <span className="cat-dot" style={{ background: cat.color }} />
                             {cat.emoji ? `${cat.emoji} ` : ""}
                             {cat.name}
-                            {v.rule_id == null && <span className="manual-mark">≈</span>}
                           </span>
                         ) : (
                           <span className="muted small">—</span>

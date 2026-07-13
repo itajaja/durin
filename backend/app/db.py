@@ -76,6 +76,11 @@ def _migrate(eng) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_categories_user_lower_name "
             "ON categories (user_id, lower(name))"
         )
+        cat_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(categories)")]
+        if "is_income" not in cat_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE categories ADD COLUMN is_income BOOLEAN DEFAULT 0"
+            )
         rule_cols = [
             r[1] for r in conn.exec_driver_sql("PRAGMA table_info(category_rules)")
         ]

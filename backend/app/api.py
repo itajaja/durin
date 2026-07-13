@@ -354,6 +354,7 @@ def _category_json(c: Category, txn_count: int) -> dict:
         "emoji": c.emoji,
         "color": c.color,
         "is_transaction": c.is_transaction,
+        "is_income": c.is_income,
         "txn_count": txn_count,
         "rules": [
             {"id": r.id, "substring": r.substring, "match_type": r.match_type}
@@ -395,6 +396,7 @@ class CategoryBody(BaseModel):
     emoji: str = ""
     color: str = "#8a8984"
     is_transaction: bool = False
+    is_income: bool = False
 
 
 @router.post("/categories")
@@ -419,6 +421,7 @@ def create_category(
         emoji=body.emoji.strip()[:16],
         color=_clean_color(body.color, "#8a8984"),
         is_transaction=body.is_transaction,
+        is_income=body.is_income,
     )
     db.add(cat)
     db.commit()
@@ -430,6 +433,7 @@ class CategoryPatch(BaseModel):
     emoji: str | None = None
     color: str | None = None
     is_transaction: bool | None = None
+    is_income: bool | None = None
 
 
 @router.patch("/categories/{category_id}")
@@ -462,6 +466,8 @@ def update_category(
         cat.color = _clean_color(body.color, cat.color)
     if body.is_transaction is not None:
         cat.is_transaction = body.is_transaction
+    if body.is_income is not None:
+        cat.is_income = body.is_income
     db.commit()
     count = (
         db.query(func.count(Transaction.id))
@@ -849,16 +855,14 @@ def list_vendors(
     end: str = Query(default=""),
 ):
     """Transactions grouped by vendor. Each vendor carries its totals for
-    the filtered range plus its automatic category: what the rules would
-    assign its transactions today (the dominant answer, when transactions
-    disagree), and the id of the vendor's own exact rule when one exists —
-    that rule is what PUT /vendors/rule manages."""
+    the filtered range plus its automatic category: the vendor's own exact
+    rule when one exists — the rule PUT /vendors/rule manages. Categories
+    that merely fall out of substring rules are not reported."""
     query = db.query(Transaction).filter(
         Transaction.user_id == user.id, Transaction.deleted.is_(False)
     )
     txns = _apply_txn_filters(query, accounts, categories, start, end).all()
 
-    winner = categorize.winner_fn(db, user.id)
     groups: dict[tuple[str, str], dict] = {}
     min_posted: int | None = None
     max_posted: int | None = None
@@ -866,11 +870,10 @@ def list_vendors(
         source, raw = _vendor_of(t)
         g = groups.setdefault(
             (source, raw.lower()),
-            {"names": Counter(), "auto": Counter(), "count": 0, "total": 0.0,
+            {"names": Counter(), "count": 0, "total": 0.0,
              "spend": 0.0, "income": 0.0},
         )
         g["names"][raw] += 1
-        g["auto"][winner(t)] += 1
         g["count"] += 1
         g["total"] += t.amount
         if t.amount < 0:
@@ -913,7 +916,6 @@ def list_vendors(
     vendors = []
     for (source, key), g in groups.items():
         rule = rule_by_key.get((source, key)) if source != "none" else None
-        auto_category_id, _ = g["auto"].most_common(1)[0]
         vendors.append(
             {
                 "key": f"{source}:{key}",
@@ -924,7 +926,6 @@ def list_vendors(
                 "spend": round(g["spend"], 2),
                 "income": round(g["income"], 2),
                 "avg_month": round(g["total"] / months_span, 2),
-                "auto_category_id": auto_category_id,
                 "rule_id": rule.id if rule else None,
                 "rule_category_id": rule.category_id if rule else None,
             }
@@ -1003,8 +1004,8 @@ def spending(
     categories: str = Query(default=""),  # comma-separated ids and/or "none"
 ):
     """Spending (expenses only, as positive magnitudes) bucketed over time,
-    one series per selected category. Categories marked is_transaction are
-    never counted, regardless of the request."""
+    one series per selected category. Categories marked is_transaction or
+    is_income are never counted, regardless of the request."""
     today = datetime.now().date()
     end_date = _parse_iso_date(end) if end else today
     if start:
@@ -1025,7 +1026,9 @@ def spending(
     spendable = {
         c.id: c
         for c in db.query(Category).filter(
-            Category.user_id == user.id, Category.is_transaction.is_(False)
+            Category.user_id == user.id,
+            Category.is_transaction.is_(False),
+            Category.is_income.is_(False),
         )
     }
     include_uncategorized = False
@@ -1130,8 +1133,10 @@ def cashflow(
     granularity: str = Query(default="month", pattern="^(day|week|month|year)$"),
 ):
     """Income vs spending bucketed over time. Categories marked
-    is_transaction (transfers, card payments…) are excluded entirely;
-    uncategorized transactions count."""
+    is_transaction (transfers, card payments…) are excluded entirely.
+    Income is what lands in is_income categories (their debits count
+    against it); everything else — uncategorized included — goes to the
+    spending column, where credits (refunds) reduce it."""
     today = datetime.now().date()
     end_date = _parse_iso_date(end) if end else today
     if start:
@@ -1152,7 +1157,7 @@ def cashflow(
     start_ts = _parse_date(start_date.isoformat(), end_of_day=False)
     end_ts = _parse_date(end_date.isoformat(), end_of_day=True)
     rows = (
-        db.query(Transaction.posted, Transaction.amount)
+        db.query(Transaction.posted, Transaction.amount, Category.is_income)
         .outerjoin(Category, Transaction.category_id == Category.id)
         .filter(
             Transaction.user_id == user.id,
@@ -1167,14 +1172,16 @@ def cashflow(
     bucket_index = {b: i for i, b in enumerate(buckets)}
     income = [0.0] * len(buckets)
     spending = [0.0] * len(buckets)
-    for posted, amount in rows:
+    for posted, amount, is_income in rows:
         key = _bucket_key(datetime.fromtimestamp(posted).date(), granularity)
         idx = bucket_index.get(key)
         if idx is None:
             continue  # posted timestamp lands outside the range edges
-        if amount >= 0:
+        if is_income:
             income[idx] += amount
         else:
+            # Both signs: a bucket's spending can dip below zero when
+            # refunds outweigh purchases (the chart just draws no bar).
             spending[idx] += -amount
 
     income = [round(v, 2) for v in income]

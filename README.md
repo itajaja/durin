@@ -57,7 +57,10 @@ your transactions, so treat it like a credentials file.
 
 Everything starts uncategorized, and a new account starts with zero
 categories. On the **Categories** page you create categories (name, emoji,
-color, and a "not spending" flag for transfers/card payments) and attach
+color, a "not spending" flag for transfers/card payments, and an "income"
+flag for salary and the like — both flagged kinds are excluded from the
+Spending page, and the Cash flow page counts only "income" categories as
+income, with credits anywhere else reducing spending instead) and attach
 **substrings** to them. A transaction whose description, payee, or memo
 contains a substring (case-insensitive; the longest matching substring wins,
 so more specific rules beat broader ones) is filed in that category. A transaction belongs to at most one category.
@@ -85,11 +88,11 @@ count there.
 The **Vendors** page groups transactions by vendor (the payee, falling back
 to the description) with each vendor's total and monthly average for the
 filtered range — the usual account, category, and date filters apply. It also
-shows each vendor's **automatic category**: click the chip to point the
-vendor at a category (an exact-match rule that beats any substring and
-re-derives the vendor's non-manual transactions immediately) or to remove the
-vendor's own rule. A `≈` marker means the category is inherited from a
-substring rule rather than a rule specific to that vendor.
+shows each vendor's **automatic category** — the vendor's own exact-match
+rule, when it has one (categories that merely fall out of substring rules
+are not shown): click the chip to point the vendor at a category (an
+exact-match rule that beats any substring and re-derives the vendor's
+non-manual transactions immediately) or to remove the vendor's own rule.
 
 ## The Assets page
 

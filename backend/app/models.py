@@ -26,7 +26,11 @@ class Category(Base):
 
     is_transaction=True marks money movements that aren't real spending
     (transfers, credit-card payments): they are excluded from the Spending
-    page's numbers.
+    page's numbers and from Cash flow entirely.
+
+    is_income=True marks real income (salary…): excluded from the Spending
+    page, and the only thing the Cash flow page counts as income — positive
+    amounts anywhere else (refunds) reduce spending instead.
     """
 
     __tablename__ = "categories"
@@ -40,6 +44,7 @@ class Category(Base):
     emoji: Mapped[str] = mapped_column(String, default="")
     color: Mapped[str] = mapped_column(String, default="#8a8984")
     is_transaction: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_income: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[int] = mapped_column(Integer, default=now_ts)
 
     rules: Mapped[list["CategoryRule"]] = relationship(

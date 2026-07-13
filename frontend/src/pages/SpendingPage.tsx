@@ -98,9 +98,10 @@ export default function SpendingPage() {
     };
   }, []);
 
-  // Spendable categories only: is_transaction ones never count as spending.
+  // Spendable categories only: is_transaction and is_income ones never
+  // count as spending.
   const spendable = useMemo(
-    () => categories.filter((c) => !c.is_transaction),
+    () => categories.filter((c) => !c.is_transaction && !c.is_income),
     [categories]
   );
 
@@ -110,7 +111,9 @@ export default function SpendingPage() {
       if (!alive.current) return;
       setCategories(resp.categories);
       const validKeys = new Set([
-        ...resp.categories.filter((c) => !c.is_transaction).map((c) => String(c.id)),
+        ...resp.categories
+          .filter((c) => !c.is_transaction && !c.is_income)
+          .map((c) => String(c.id)),
         "none",
       ]);
       // Snapshot outside the updater: React (StrictMode) may run the
