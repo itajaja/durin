@@ -108,8 +108,9 @@ export default function CategoriesPage() {
       <h2>Categories</h2>
       <p className="muted">
         Transactions start uncategorized. Add substrings to a category and any uncategorized
-        transaction whose description, payee, or memo contains one (case-insensitive, first
-        match wins) is filed there. Removing a substring never moves transactions;{" "}
+        transaction whose description, payee, or memo contains one is filed there
+        (case-insensitive; the longest match wins, and a vendor's own rule — set on the
+        Vendors page — beats any substring). Removing a substring never moves transactions;{" "}
         <em>Recategorize</em> on a category re-derives just that category.
       </p>
 
@@ -284,7 +285,8 @@ function CategoryCard({
   const { maskText } = useMoney();
 
   // Live preview: which uncategorized transactions would this substring
-  // actually file HERE? (Server-side it respects older rules' priority.)
+  // actually file HERE? (Server-side it weighs it against existing rules:
+  // exact and longer-substring rules elsewhere keep priority.)
   useEffect(() => {
     // Always invalidate in-flight responses, including when clearing.
     const mySeq = ++previewSeq.current;
@@ -480,11 +482,15 @@ function CategoryCard({
             className="rule-chip"
             title={
               r.match_type === "payee"
-                ? "Matches the payee field exactly"
-                : "Matches description, payee, or memo"
+                ? "Matches the payee field exactly (a vendor rule)"
+                : r.match_type === "description"
+                  ? "Matches the description field exactly (a vendor rule)"
+                  : "Matches description, payee, or memo"
             }
           >
-            {r.match_type === "payee" && <span className="rule-kind">payee:</span>}
+            {r.match_type !== "substring" && (
+              <span className="rule-kind">{r.match_type}:</span>
+            )}
             {r.substring}
             <button
               className="rule-x"

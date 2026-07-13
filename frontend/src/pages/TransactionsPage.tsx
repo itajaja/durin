@@ -1,20 +1,9 @@
-import {
-  FormEvent,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, formatDate } from "../api";
+import { catOptions, InlinePicker } from "../components/CategoryPicker";
 import DatePresets from "../components/DatePresets";
-import Select, {
-  filterOptions,
-  Option,
-  OptionList,
-  usePopover,
-} from "../components/Dropdown";
+import Select, { filterOptions, OptionList, usePopover } from "../components/Dropdown";
 import Money, { useMoney } from "../components/Money";
 import MultiSelect from "../components/MultiSelect";
 import useUrlFilterSync from "../components/useUrlFilterSync";
@@ -25,26 +14,12 @@ import {
   REFRESHED_EVENT,
   Txn,
   TxnPage,
-  UNCATEGORIZED_COLOR,
 } from "../types";
 
 type SortField = "posted" | "amount";
 type SortDir = "asc" | "desc";
 
 const PAGE_SIZE = 50;
-
-function catOptions(categories: Category[], includeNone: boolean): Option[] {
-  return [
-    ...(includeNone
-      ? [{ value: "none", label: "Uncategorized", color: UNCATEGORIZED_COLOR }]
-      : []),
-    ...categories.map((c) => ({
-      value: String(c.id),
-      label: c.emoji ? `${c.emoji} ${c.name}` : c.name,
-      color: c.color,
-    })),
-  ];
-}
 
 export default function TransactionsPage() {
   const [searchParams] = useSearchParams();
@@ -863,41 +838,6 @@ export default function TransactionsPage() {
           )}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function InlinePicker({
-  title,
-  categories,
-  includeUncategorized,
-  onPick,
-  onClose,
-}: {
-  title: string;
-  categories: Category[];
-  includeUncategorized: boolean;
-  onPick: (categoryId: number | null) => void;
-  onClose: () => void;
-}) {
-  const options = catOptions(categories, includeUncategorized);
-  const pick = (v: string) => onPick(v === "none" ? null : Number(v));
-  const { rootRef, query } = usePopover(true, onClose, (q) => {
-    const first = filterOptions(options, q)[0];
-    if (first) pick(first.value);
-  });
-  const [openUp, setOpenUp] = useState(false);
-  // Flip upward when the popover would poke below the viewport.
-  useLayoutEffect(() => {
-    const el = rootRef.current;
-    if (el && el.getBoundingClientRect().bottom > window.innerHeight - 8) {
-      setOpenUp(true);
-    }
-  }, [rootRef]);
-  return (
-    <div ref={rootRef} className={`msel-pop inline-pop${openUp ? " inline-pop-up" : ""}`}>
-      <div className="inline-pop-title">{title}</div>
-      <OptionList options={options} query={query} onPick={pick} />
     </div>
   );
 }

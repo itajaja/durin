@@ -43,7 +43,9 @@ export interface Account {
 export interface CategoryRule {
   id: number;
   substring: string;
-  match_type: "substring" | "payee";
+  /** "payee" and "description" match their field exactly (a vendor's
+   * automatic category); "substring" matches anywhere in the text. */
+  match_type: "substring" | "payee" | "description";
 }
 
 export interface Category {
@@ -150,6 +152,32 @@ export interface TxnPage {
   total_income: number;
   page: number;
   page_size: number;
+}
+
+export interface Vendor {
+  /** Server-side group identity ("source:lowercased name"). */
+  key: string;
+  name: string;
+  /** Which field the vendor name came from; "none" is the pseudo-vendor
+   * for transactions with neither payee nor description (no rule
+   * management for it). */
+  source: "payee" | "description" | "none";
+  count: number;
+  total: number;
+  spend: number;
+  income: number;
+  avg_month: number;
+  /** What the rules would assign this vendor's transactions today. */
+  auto_category_id: number | null;
+  /** The vendor's own exact rule, when one exists — the thing the page
+   * edits and removes. */
+  rule_id: number | null;
+  rule_category_id: number | null;
+}
+
+export interface VendorsResponse {
+  vendors: Vendor[];
+  months_span: number;
 }
 
 export interface SyncStatus {

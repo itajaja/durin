@@ -49,9 +49,11 @@ class Category(Base):
 
 class CategoryRule(Base):
     """A matching rule. match_type "substring" matches description/payee/memo
-    containing the text (case-insensitive); "payee" matches the payee field
-    exactly (case-insensitive). Rules match in creation order across both
-    types; first match wins."""
+    containing the text; "payee" and "description" match their field exactly
+    (these are a vendor's automatic category, managed from the Vendors page).
+    All matching is case-insensitive. Exact rules always beat substring
+    rules; substring rules match longest-first, with creation order breaking
+    length ties."""
 
     __tablename__ = "category_rules"
 

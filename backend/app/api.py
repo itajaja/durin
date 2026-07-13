@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 from datetime import date, datetime, timedelta
 from typing import Literal
 
@@ -492,7 +493,7 @@ def delete_category(
 
 class RuleBody(BaseModel):
     substring: str
-    match_type: Literal["substring", "payee"] = "substring"
+    match_type: Literal["substring", "payee", "description"] = "substring"
 
 
 @router.post("/categories/{category_id}/rules")
@@ -517,7 +518,7 @@ def add_rule(
     db.commit()
     # Adding a substring applies to uncategorized transactions only. Report
     # how many landed in THIS category (the sweep can also file rows under
-    # other categories whose older rules match rows freed by past removals).
+    # other categories whose rules match rows freed by past removals).
     def _count() -> int:
         return (
             db.query(func.count(Transaction.id))
@@ -615,23 +616,9 @@ def _parse_date(value: str, end_of_day: bool) -> int:
     return ts - 1 if end_of_day else ts
 
 
-@router.get("/transactions")
-def list_transactions(
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    accounts: str = Query(default=""),  # comma-separated account ids; empty = all
-    categories: str = Query(default=""),  # comma-separated category ids and/or "none"
-    start: str = Query(default=""),
-    end: str = Query(default=""),
-    q: str = Query(default=""),
-    sort: str = Query(default="posted", pattern="^(posted|amount)$"),
-    dir: str = Query(default="desc", pattern="^(asc|desc)$"),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=500),
-):
-    query = db.query(Transaction).filter(
-        Transaction.user_id == user.id, Transaction.deleted.is_(False)
-    )
+def _apply_txn_filters(query, accounts: str, categories: str, start: str, end: str):
+    """The account/category/date filters shared by /transactions and
+    /vendors — both must interpret the same query params identically."""
     if accounts.strip():
         try:
             account_ids = [int(p) for p in accounts.split(",") if p.strip()]
@@ -665,6 +652,27 @@ def list_transactions(
         query = query.filter(Transaction.posted >= _parse_date(start, end_of_day=False))
     if end:
         query = query.filter(Transaction.posted <= _parse_date(end, end_of_day=True))
+    return query
+
+
+@router.get("/transactions")
+def list_transactions(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    accounts: str = Query(default=""),  # comma-separated account ids; empty = all
+    categories: str = Query(default=""),  # comma-separated category ids and/or "none"
+    start: str = Query(default=""),
+    end: str = Query(default=""),
+    q: str = Query(default=""),
+    sort: str = Query(default="posted", pattern="^(posted|amount)$"),
+    dir: str = Query(default="desc", pattern="^(asc|desc)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+):
+    query = db.query(Transaction).filter(
+        Transaction.user_id == user.id, Transaction.deleted.is_(False)
+    )
+    query = _apply_txn_filters(query, accounts, categories, start, end)
     if q.strip():
         # Escape LIKE wildcards so searching for "50%" or "_" works literally.
         escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -817,6 +825,137 @@ def batch_transactions(
         )
     db.commit()
     return {"ok": True, "affected": affected}
+
+
+def _vendor_of(t: Transaction) -> tuple[str, str]:
+    """A transaction's vendor: the payee, falling back to the description.
+    Returns (source, name); source "none" groups the leftovers."""
+    payee = t.payee.strip()
+    if payee:
+        return "payee", payee
+    description = t.description.strip()
+    if description:
+        return "description", description
+    return "none", ""
+
+
+@router.get("/vendors")
+def list_vendors(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    accounts: str = Query(default=""),  # comma-separated account ids; empty = all
+    categories: str = Query(default=""),  # comma-separated category ids and/or "none"
+    start: str = Query(default=""),
+    end: str = Query(default=""),
+):
+    """Transactions grouped by vendor. Each vendor carries its totals for
+    the filtered range plus its automatic category: what the rules would
+    assign its transactions today (the dominant answer, when transactions
+    disagree), and the id of the vendor's own exact rule when one exists —
+    that rule is what PUT /vendors/rule manages."""
+    query = db.query(Transaction).filter(
+        Transaction.user_id == user.id, Transaction.deleted.is_(False)
+    )
+    txns = _apply_txn_filters(query, accounts, categories, start, end).all()
+
+    winner = categorize.winner_fn(db, user.id)
+    groups: dict[tuple[str, str], dict] = {}
+    min_posted: int | None = None
+    max_posted: int | None = None
+    for t in txns:
+        source, raw = _vendor_of(t)
+        g = groups.setdefault(
+            (source, raw.lower()),
+            {"names": Counter(), "auto": Counter(), "count": 0, "total": 0.0,
+             "spend": 0.0, "income": 0.0},
+        )
+        g["names"][raw] += 1
+        g["auto"][winner(t)] += 1
+        g["count"] += 1
+        g["total"] += t.amount
+        if t.amount < 0:
+            g["spend"] += -t.amount
+        else:
+            g["income"] += t.amount
+        if min_posted is None or t.posted < min_posted:
+            min_posted = t.posted
+        if max_posted is None or t.posted > max_posted:
+            max_posted = t.posted
+
+    # Average per month, mirroring /spending: over the requested range when
+    # both ends are given, else over the span the data actually covers.
+    if start and end:
+        span_days = (_parse_iso_date(end) - _parse_iso_date(start)).days + 1
+    elif min_posted is not None and max_posted is not None:
+        span_days = (
+            datetime.fromtimestamp(max_posted).date()
+            - datetime.fromtimestamp(min_posted).date()
+        ).days + 1
+    else:
+        span_days = 0
+    months_span = max(span_days / 30.4375, 1.0)
+
+    # A vendor's own rule: the exact rule whose text is the vendor name.
+    exact_rules = (
+        db.query(CategoryRule)
+        .join(Category, CategoryRule.category_id == Category.id)
+        .filter(
+            Category.user_id == user.id,
+            CategoryRule.match_type.in_(("payee", "description")),
+        )
+        .order_by(CategoryRule.id)
+        .all()
+    )
+    rule_by_key: dict[tuple[str, str], CategoryRule] = {}
+    for r in exact_rules:
+        rule_by_key.setdefault((r.match_type, r.substring.lower()), r)
+
+    vendors = []
+    for (source, key), g in groups.items():
+        rule = rule_by_key.get((source, key)) if source != "none" else None
+        auto_category_id, _ = g["auto"].most_common(1)[0]
+        vendors.append(
+            {
+                "key": f"{source}:{key}",
+                "name": g["names"].most_common(1)[0][0] or "(no description)",
+                "source": source,
+                "count": g["count"],
+                "total": round(g["total"], 2),
+                "spend": round(g["spend"], 2),
+                "income": round(g["income"], 2),
+                "avg_month": round(g["total"] / months_span, 2),
+                "auto_category_id": auto_category_id,
+                "rule_id": rule.id if rule else None,
+                "rule_category_id": rule.category_id if rule else None,
+            }
+        )
+    vendors.sort(key=lambda v: abs(v["total"]), reverse=True)
+    return {"vendors": vendors, "months_span": round(months_span, 2)}
+
+
+class VendorRuleBody(BaseModel):
+    source: Literal["payee", "description"]
+    name: str
+    category_id: int | None = None
+
+
+@router.put("/vendors/rule")
+def set_vendor_rule(
+    body: VendorRuleBody,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set (or, with category_id null, remove) a vendor's automatic
+    category and re-derive that vendor's non-manual transactions."""
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Vendor name is required")
+    if body.category_id is not None:
+        _get_own_category(db, user, body.category_id)
+    result = categorize.set_vendor_category(
+        db, user.id, body.source, name, body.category_id
+    )
+    return {"ok": True, **result}
 
 
 def _bucket_key(d: date, granularity: str) -> str:

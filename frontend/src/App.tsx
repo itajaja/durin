@@ -5,6 +5,7 @@ import { DiscreteModeContext } from "./components/Money";
 import { Connection, REFRESHED_EVENT, SyncStatus, User } from "./types";
 import LoginPage from "./pages/LoginPage";
 import TransactionsPage from "./pages/TransactionsPage";
+import VendorsPage from "./pages/VendorsPage";
 import SpendingPage from "./pages/SpendingPage";
 import CashflowPage from "./pages/CashflowPage";
 import AssetsPage from "./pages/AssetsPage";
@@ -171,6 +172,7 @@ export default function App() {
           <NavLink to="/" end>
             Transactions
           </NavLink>
+          <NavLink to="/vendors">Vendors</NavLink>
           <NavLink to="/spending">Spending</NavLink>
           <NavLink to="/cashflow">Cash flow</NavLink>
           <NavLink to="/assets">Assets</NavLink>
@@ -228,6 +230,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<TransactionsPage />} />
+          <Route path="/vendors" element={<VendorsPage />} />
           <Route path="/spending" element={<SpendingPage />} />
           <Route path="/cashflow" element={<CashflowPage />} />
           <Route path="/assets" element={<AssetsPage />} />
