@@ -59,6 +59,7 @@ function AliasInput({
 export default function SettingsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [showOff, setShowOff] = useState(false);
   const [token, setToken] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -192,6 +193,9 @@ export default function SettingsPage() {
     return <span className="badge">never synced</span>;
   };
 
+  const offCount = accounts.filter((a) => !a.enabled).length;
+  const shownAccounts = showOff ? accounts : accounts.filter((a) => a.enabled);
+
   return (
     <div className="page">
       <h2>Settings</h2>
@@ -295,7 +299,17 @@ export default function SettingsPage() {
       </section>
 
       <section className="card">
-        <h3>Accounts</h3>
+        <div className="cat-card-head">
+          <h3>Accounts</h3>
+          <div className="spacer" />
+          {offCount > 0 && (
+            <button className="btn btn-quiet btn-small" onClick={() => setShowOff(!showOff)}>
+              {showOff
+                ? "Hide turned-off accounts"
+                : `Show ${offCount} turned-off account${offCount === 1 ? "" : "s"}`}
+            </button>
+          )}
+        </div>
         <p className="muted small">
           An alias replaces the bank's account name everywhere else in the app. Leave it
           empty to keep the bank's name. Turning an account off deletes its transactions
@@ -304,6 +318,10 @@ export default function SettingsPage() {
         </p>
         {accounts.length === 0 ? (
           <p className="muted">No accounts yet — they appear after the first sync.</p>
+        ) : shownAccounts.length === 0 ? (
+          <p className="muted">
+            All accounts are turned off — use the button above to show them.
+          </p>
         ) : (
           <table>
             <thead>
@@ -318,7 +336,7 @@ export default function SettingsPage() {
               </tr>
             </thead>
             <tbody>
-              {accounts.map((a) => (
+              {shownAccounts.map((a) => (
                 <tr key={a.id} className={a.enabled ? undefined : "row-off"}>
                   <td>{a.org_name || "—"}</td>
                   <td>
