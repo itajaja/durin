@@ -33,6 +33,14 @@ function niceCeil(v: number): number {
   return nice * pow;
 }
 
+function monthLabel(bucket: string): string {
+  const [y, m] = bucket.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, {
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function bucketLabel(bucket: string, granularity: Granularity): string {
   if (granularity === "year") return bucket;
   if (granularity === "month") {
@@ -65,6 +73,9 @@ export default function CashflowPage() {
     return g === "day" || g === "week" || g === "year" ? g : "month";
   });
   const [data, setData] = useState<CashflowResponse | null>(null);
+  // Month-grouped series for the table below the chart; reuses the chart
+  // response when the chart itself is grouped by month.
+  const [monthData, setMonthData] = useState<CashflowResponse | null>(null);
   const [currency, setCurrency] = useState("USD");
   const [mixedCurrencies, setMixedCurrencies] = useState(false);
   const [error, setError] = useState("");
@@ -126,11 +137,17 @@ export default function CashflowPage() {
       return;
     }
     const mySeq = ++fetchSeq.current;
-    const params = new URLSearchParams({ start, end, granularity });
+    const fetchOne = (g: Granularity) =>
+      api<CashflowResponse>(`/api/cashflow?${new URLSearchParams({ start, end, granularity: g })}`);
     try {
-      const resp = await api<CashflowResponse>(`/api/cashflow?${params}`);
+      // The table below the chart is always monthly, whatever Group by says.
+      const [resp, monthResp] = await Promise.all([
+        fetchOne(granularity),
+        granularity === "month" ? null : fetchOne("month"),
+      ]);
       if (!alive.current || mySeq !== fetchSeq.current) return;
       setData(resp);
+      setMonthData(monthResp ?? resp);
       setError("");
       setHoverIdx(null);
     } catch (err) {
@@ -174,6 +191,33 @@ export default function CashflowPage() {
     .join(" ");
 
   const hovered = hoverIdx !== null && data ? hoverIdx : null;
+
+  const summary = data && (
+    <div className="summary muted">
+      <div>
+        Total income:{" "}
+        <strong className="pos">{fmt(data.total_income, currency)}</strong> ·
+        avg/month{" "}
+        <strong className="pos">{fmt(data.avg_income_month, currency)}</strong>
+      </div>
+      <div>
+        Total spending:{" "}
+        <strong className="neg">{fmt(data.total_spending, currency)}</strong> ·
+        avg/month{" "}
+        <strong className="neg">{fmt(data.avg_spending_month, currency)}</strong>
+      </div>
+      <div>
+        Total net:{" "}
+        <strong className={data.total_net < 0 ? "neg" : "pos"}>
+          {fmt(data.total_net, currency)}
+        </strong>{" "}
+        · avg/month{" "}
+        <strong className={data.avg_net_month < 0 ? "neg" : "pos"}>
+          {fmt(data.avg_net_month, currency)}
+        </strong>
+      </div>
+    </div>
+  );
 
   return (
     <div className="page">
@@ -219,30 +263,7 @@ export default function CashflowPage() {
         <div className="card empty">No cash flow in this range.</div>
       ) : data ? (
         <div className="chart-wrap card">
-          <div className="summary muted">
-            <div>
-              Total income:{" "}
-              <strong className="pos">{fmt(data.total_income, currency)}</strong> ·
-              avg/month{" "}
-              <strong className="pos">{fmt(data.avg_income_month, currency)}</strong>
-            </div>
-            <div>
-              Total spending:{" "}
-              <strong className="neg">{fmt(data.total_spending, currency)}</strong> ·
-              avg/month{" "}
-              <strong className="neg">{fmt(data.avg_spending_month, currency)}</strong>
-            </div>
-            <div>
-              Total net:{" "}
-              <strong className={data.total_net < 0 ? "neg" : "pos"}>
-                {fmt(data.total_net, currency)}
-              </strong>{" "}
-              · avg/month{" "}
-              <strong className={data.avg_net_month < 0 ? "neg" : "pos"}>
-                {fmt(data.avg_net_month, currency)}
-              </strong>
-            </div>
-          </div>
+          {summary}
           <div className="chart-scroll">
             <div className="chart-inner">
               <svg
@@ -387,6 +408,31 @@ export default function CashflowPage() {
         </div>
       ) : (
         <div className="card empty">Loading…</div>
+      )}
+
+      {data && hasAnyFlow && monthData && (
+        <table className="txn-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th className="num">Income</th>
+              <th className="num">Spending</th>
+              <th className="num">Net</th>
+            </tr>
+          </thead>
+          <tbody>
+            {monthData.buckets.map((b, i) => (
+              <tr key={b}>
+                <td className="nowrap">{monthLabel(b)}</td>
+                <td className="num nowrap pos">{fmt(monthData.income[i], currency)}</td>
+                <td className="num nowrap neg">{fmt(monthData.spending[i], currency)}</td>
+                <td className={`num nowrap ${monthData.net[i] < 0 ? "neg" : "pos"}`}>
+                  {fmt(monthData.net[i], currency)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
