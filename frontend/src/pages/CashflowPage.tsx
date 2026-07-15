@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { api, isoDate } from "../api";
+import CopyableTable from "../components/CopyableTable";
 import { useMoney } from "../components/Money";
 import DatePresets from "../components/DatePresets";
 import Select from "../components/Dropdown";
 import useUrlFilterSync from "../components/useUrlFilterSync";
+import { csvAmount } from "../csv";
 import { Account, CashflowResponse, REFRESHED_EVENT } from "../types";
 
 type Granularity = "day" | "week" | "month" | "year";
@@ -12,12 +14,6 @@ type Granularity = "day" | "week" | "month" | "year";
 const CHART_W = 900;
 const CHART_H = 340;
 const MARGIN = { top: 14, right: 10, bottom: 30, left: 62 };
-
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
 
 function defaultRange(): { start: string; end: string } {
   const now = new Date();
@@ -57,7 +53,7 @@ function bucketLabel(bucket: string, granularity: Granularity): string {
 }
 
 export default function CashflowPage() {
-  const { fmt, fmtCompact } = useMoney();
+  const { fmt, fmtCompact, plain } = useMoney();
   const [searchParams] = useSearchParams();
   const urlInit = useRef({
     from: searchParams.get("from"),
@@ -411,28 +407,36 @@ export default function CashflowPage() {
       )}
 
       {data && hasAnyFlow && monthData && (
-        <table className="txn-table">
-          <thead>
+        <CopyableTable
+          className="txn-table"
+          csvHeader={["Month", "Income", "Spending", "Net"]}
+          toCsv={(b, i) => [
+            // Raw "2026-01" buckets sort cleanly in a spreadsheet.
+            b,
+            plain(csvAmount(monthData.income[i])),
+            plain(csvAmount(monthData.spending[i])),
+            plain(csvAmount(monthData.net[i])),
+          ]}
+          data={monthData.buckets}
+          header={
             <tr>
               <th>Month</th>
               <th className="num">Income</th>
               <th className="num">Spending</th>
               <th className="num">Net</th>
             </tr>
-          </thead>
-          <tbody>
-            {monthData.buckets.map((b, i) => (
-              <tr key={b}>
-                <td className="nowrap">{monthLabel(b)}</td>
-                <td className="num nowrap pos">{fmt(monthData.income[i], currency)}</td>
-                <td className="num nowrap neg">{fmt(monthData.spending[i], currency)}</td>
-                <td className={`num nowrap ${monthData.net[i] < 0 ? "neg" : "pos"}`}>
-                  {fmt(monthData.net[i], currency)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          }
+          renderRow={(b, i) => (
+            <tr key={b}>
+              <td className="nowrap">{monthLabel(b)}</td>
+              <td className="num nowrap pos">{fmt(monthData.income[i], currency)}</td>
+              <td className="num nowrap neg">{fmt(monthData.spending[i], currency)}</td>
+              <td className={`num nowrap ${monthData.net[i] < 0 ? "neg" : "pos"}`}>
+                {fmt(monthData.net[i], currency)}
+              </td>
+            </tr>
+          )}
+        />
       )}
     </div>
   );

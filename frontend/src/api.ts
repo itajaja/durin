@@ -56,6 +56,26 @@ export function formatDate(ts: number | null): string {
   return new Date(ts * 1000).toLocaleDateString();
 }
 
+/** Local-timezone YYYY-MM-DD. */
+export function isoDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** isoDate for epoch-second timestamps (used in CSV cells, where an
+ * unambiguous date beats the localized display format). */
+export function isoDateFromTs(ts: number | null): string {
+  return ts ? isoDate(new Date(ts * 1000)) : "";
+}
+
+/** Local-timezone YYYY-MM-DD HH:MM, for CSV cells holding datetimes. */
+export function isoDateTimeFromTs(ts: number | null): string {
+  if (!ts) return "";
+  const d = new Date(ts * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${isoDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function formatDateTime(ts: number | null): string {
   if (!ts) return "never";
   return new Date(ts * 1000).toLocaleString();

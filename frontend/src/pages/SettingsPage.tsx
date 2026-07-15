@@ -1,6 +1,8 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, formatDateTime } from "../api";
-import Money from "../components/Money";
+import { api, formatDateTime, isoDateTimeFromTs } from "../api";
+import CopyableTable from "../components/CopyableTable";
+import Money, { useMoney } from "../components/Money";
+import { csvAmount } from "../csv";
 import { Account, Connection } from "../types";
 
 /** Inline alias editor: saves on blur or Enter, only when the value
@@ -57,6 +59,7 @@ function AliasInput({
 }
 
 export default function SettingsPage() {
+  const { plain } = useMoney();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showOff, setShowOff] = useState(false);
@@ -184,13 +187,25 @@ export default function SettingsPage() {
     }
   };
 
+  // Status as text (shared with the CSV copy) and as a colored badge.
+  const statusText = (c: Connection) => {
+    if (c.syncing) return "syncing…";
+    if (c.last_sync_status === "ok") return "ok";
+    if (c.last_sync_status === "partial") return "partial";
+    if (c.last_sync_status === "error") return "error";
+    return "never synced";
+  };
   const statusLabel = (c: Connection) => {
-    if (c.syncing) return <span className="badge badge-blue">syncing…</span>;
-    if (c.last_sync_status === "ok") return <span className="badge badge-green">ok</span>;
-    if (c.last_sync_status === "partial")
-      return <span className="badge badge-amber">partial</span>;
-    if (c.last_sync_status === "error") return <span className="badge badge-red">error</span>;
-    return <span className="badge">never synced</span>;
+    const color = c.syncing
+      ? " badge-blue"
+      : c.last_sync_status === "ok"
+        ? " badge-green"
+        : c.last_sync_status === "partial"
+          ? " badge-amber"
+          : c.last_sync_status === "error"
+            ? " badge-red"
+            : "";
+    return <span className={`badge${color}`}>{statusText(c)}</span>;
   };
 
   const offCount = accounts.filter((a) => !a.enabled).length;
@@ -251,8 +266,17 @@ export default function SettingsPage() {
         {connections.length === 0 ? (
           <p className="muted">No connections yet.</p>
         ) : (
-          <table>
-            <thead>
+          <CopyableTable
+            csvHeader={["Name", "Status", "Accounts", "Last synced", "Error"]}
+            toCsv={(c) => [
+              c.name,
+              statusText(c),
+              String(c.account_count),
+              isoDateTimeFromTs(c.last_sync_at),
+              c.last_sync_error || "",
+            ]}
+            data={connections}
+            header={
               <tr>
                 <th>Name</th>
                 <th>Status</th>
@@ -260,41 +284,39 @@ export default function SettingsPage() {
                 <th>Last synced</th>
                 <th></th>
               </tr>
-            </thead>
-            <tbody>
-              {connections.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.name}</td>
-                  <td>
-                    {statusLabel(c)}
-                    {c.last_sync_error && (
-                      <div
-                        className={`muted small ${
-                          c.last_sync_status === "ok" ? "" : "error-text"
-                        }`}
-                      >
-                        {c.last_sync_error}
-                      </div>
-                    )}
-                  </td>
-                  <td>{c.account_count}</td>
-                  <td className="nowrap">{formatDateTime(c.last_sync_at)}</td>
-                  <td className="nowrap actions">
-                    <button
-                      className="btn btn-quiet"
-                      onClick={() => syncNow(c.id)}
-                      disabled={c.syncing}
+            }
+            renderRow={(c) => (
+              <tr key={c.id}>
+                <td>{c.name}</td>
+                <td>
+                  {statusLabel(c)}
+                  {c.last_sync_error && (
+                    <div
+                      className={`muted small ${
+                        c.last_sync_status === "ok" ? "" : "error-text"
+                      }`}
                     >
-                      Sync now
-                    </button>
-                    <button className="btn btn-danger" onClick={() => remove(c)}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      {c.last_sync_error}
+                    </div>
+                  )}
+                </td>
+                <td>{c.account_count}</td>
+                <td className="nowrap">{formatDateTime(c.last_sync_at)}</td>
+                <td className="nowrap actions">
+                  <button
+                    className="btn btn-quiet"
+                    onClick={() => syncNow(c.id)}
+                    disabled={c.syncing}
+                  >
+                    Sync now
+                  </button>
+                  <button className="btn btn-danger" onClick={() => remove(c)}>
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            )}
+          />
         )}
       </section>
 
@@ -323,8 +345,29 @@ export default function SettingsPage() {
             All accounts are turned off — use the button above to show them.
           </p>
         ) : (
-          <table>
-            <thead>
+          <CopyableTable
+            csvHeader={[
+              "Institution",
+              "Account",
+              "Alias",
+              "Balance",
+              "Available",
+              "Currency",
+              "As of",
+              "On",
+            ]}
+            toCsv={(a) => [
+              a.org_name,
+              a.name,
+              a.alias,
+              plain(csvAmount(a.balance)),
+              a.available_balance != null ? plain(csvAmount(a.available_balance)) : "",
+              a.currency,
+              isoDateTimeFromTs(a.balance_date),
+              a.enabled ? "yes" : "no",
+            ]}
+            data={shownAccounts}
+            header={
               <tr>
                 <th>Institution</th>
                 <th>Account</th>
@@ -334,45 +377,43 @@ export default function SettingsPage() {
                 <th>As of</th>
                 <th></th>
               </tr>
-            </thead>
-            <tbody>
-              {shownAccounts.map((a) => (
-                <tr key={a.id} className={a.enabled ? undefined : "row-off"}>
-                  <td>{a.org_name || "—"}</td>
-                  <td>
-                    {a.name}
-                    {!a.enabled && <span className="badge">off</span>}
-                  </td>
-                  <td>
-                    <AliasInput
-                      account={a}
-                      onSaved={load}
-                      onError={(msg) => setError(msg)}
-                    />
-                  </td>
-                  <td className="num nowrap">
-                    <Money amount={a.balance} currency={a.currency} />
-                  </td>
-                  <td className="num nowrap">
-                    {a.available_balance != null ? (
-                      <Money amount={a.available_balance} currency={a.currency} />
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="nowrap">{formatDateTime(a.balance_date)}</td>
-                  <td className="nowrap actions">
-                    <button
-                      className={a.enabled ? "btn btn-danger" : "btn btn-quiet"}
-                      onClick={() => toggleAccount(a)}
-                    >
-                      {a.enabled ? "Turn off" : "Turn on"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            }
+            renderRow={(a) => (
+              <tr key={a.id} className={a.enabled ? undefined : "row-off"}>
+                <td>{a.org_name || "—"}</td>
+                <td>
+                  {a.name}
+                  {!a.enabled && <span className="badge">off</span>}
+                </td>
+                <td>
+                  <AliasInput
+                    account={a}
+                    onSaved={load}
+                    onError={(msg) => setError(msg)}
+                  />
+                </td>
+                <td className="num nowrap">
+                  <Money amount={a.balance} currency={a.currency} />
+                </td>
+                <td className="num nowrap">
+                  {a.available_balance != null ? (
+                    <Money amount={a.available_balance} currency={a.currency} />
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="nowrap">{formatDateTime(a.balance_date)}</td>
+                <td className="nowrap actions">
+                  <button
+                    className={a.enabled ? "btn btn-danger" : "btn btn-quiet"}
+                    onClick={() => toggleAccount(a)}
+                  >
+                    {a.enabled ? "Turn off" : "Turn on"}
+                  </button>
+                </td>
+              </tr>
+            )}
+          />
         )}
       </section>
     </div>

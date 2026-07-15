@@ -27,6 +27,8 @@ export function useMoney() {
       discrete ? MASK : formatMoney(amount, currency),
     fmtCompact: (v: number, currency: string) => (discrete ? MASK : compactMoney(v, currency)),
     maskText: (text: string) => (discrete ? text.replace(AMOUNT_IN_TEXT, MASK) : text),
+    /** Unformatted numeric string (for CSV cells) that still honors the mask. */
+    plain: (amount: string | number) => (discrete ? MASK : String(amount)),
   };
 }
 

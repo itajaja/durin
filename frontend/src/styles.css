@@ -421,6 +421,45 @@ th {
   background: color-mix(in srgb, var(--gold) 10%, var(--panel));
 }
 
+/* Copy-as-CSV: a button floating by the table's top-right corner,
+   revealed while the header row (or the button itself) is hovered. */
+.csv-wrap {
+  position: relative;
+}
+
+.csv-copy {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.55rem;
+  z-index: 20;
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  background: var(--panel-hd);
+  border: 1px solid var(--slab-border);
+  box-shadow: var(--slab-shadow);
+  color: var(--gold-hd);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.csv-copy.is-visible,
+.csv-copy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.csv-copy:hover {
+  color: var(--gold);
+}
+
 th.sortable {
   cursor: pointer;
   user-select: none;

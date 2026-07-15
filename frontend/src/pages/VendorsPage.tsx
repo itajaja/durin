@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { api, isoDate } from "../api";
 import { catOptions, InlinePicker } from "../components/CategoryPicker";
+import CopyableTable from "../components/CopyableTable";
 import DatePresets from "../components/DatePresets";
 import Money, { useMoney } from "../components/Money";
 import MultiSelect from "../components/MultiSelect";
 import useUrlFilterSync from "../components/useUrlFilterSync";
+import { csvAmount } from "../csv";
 import {
   Account,
   CategoriesResponse,
@@ -18,12 +20,6 @@ import {
 type SortField = "name" | "count" | "total";
 type SortDir = "asc" | "desc";
 
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
 function defaultRange(): { start: string; end: string } {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
@@ -31,7 +27,7 @@ function defaultRange(): { start: string; end: string } {
 }
 
 export default function VendorsPage() {
-  const { maskText } = useMoney();
+  const { maskText, plain } = useMoney();
   const [searchParams] = useSearchParams();
   // Snapshot of the URL at mount: it seeds the initial state, then the URL
   // follows the state.
@@ -393,8 +389,21 @@ export default function VendorsPage() {
         </div>
       )}
 
-      <table className="txn-table hover-rows">
-        <thead>
+      <CopyableTable
+        className="txn-table hover-rows"
+        csvHeader={["Vendor", "Transactions", "Total", "Avg / month", "Automatic category"]}
+        toCsv={(v) => [
+          maskText(v.name),
+          String(v.count),
+          plain(csvAmount(v.total)),
+          plain(csvAmount(v.avg_month)),
+          (v.source !== "none" &&
+            v.rule_category_id != null &&
+            categoriesById.get(v.rule_category_id)?.name) ||
+            "",
+        ]}
+        data={shown}
+        header={
           <tr>
             <th className="sortable" onClick={() => toggleSort("name")}>
               Vendor{sortIndicator("name")}
@@ -410,88 +419,81 @@ export default function VendorsPage() {
             </th>
             <th>Automatic category</th>
           </tr>
-        </thead>
-        <tbody>
-          {loading && !data ? (
-            <tr>
-              <td colSpan={5} className="empty">
-                Loading…
-              </td>
-            </tr>
-          ) : shown.length === 0 ? (
-            <tr>
-              <td colSpan={5} className="empty">
-                {hasFilters
+        }
+        emptyRow={
+          <tr>
+            <td colSpan={5} className="empty">
+              {loading && !data
+                ? "Loading…"
+                : hasFilters
                   ? "No vendors match these filters."
                   : "No transactions yet. Add a SimpleFin connection in Settings, then refresh."}
+            </td>
+          </tr>
+        }
+        renderRow={(v) => {
+          const cat =
+            v.rule_category_id != null
+              ? categoriesById.get(v.rule_category_id)
+              : undefined;
+          return (
+            <tr key={v.key}>
+              <td>{maskText(v.name)}</td>
+              <td className="num nowrap">
+                <Link
+                  to={`/?q=${encodeURIComponent(v.name)}`}
+                  className="muted"
+                  title="Show these transactions"
+                >
+                  {v.count}
+                </Link>
+              </td>
+              <td className={`num nowrap ${v.total < 0 ? "neg" : "pos"}`}>
+                <Money amount={v.total} currency={currency} />
+              </td>
+              <td className={`num nowrap ${v.avg_month < 0 ? "neg" : "pos"}`}>
+                <Money amount={v.avg_month} currency={currency} />
+              </td>
+              <td className="nowrap cat-cell">
+                {v.source === "none" ? (
+                  <span className="muted small">—</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="cat-chip-btn"
+                    title={
+                      v.rule_id != null
+                        ? "This vendor has its own rule — click to change or remove it"
+                        : "Set an automatic category for this vendor"
+                    }
+                    onClick={() => setPickerKey(pickerKey === v.key ? null : v.key)}
+                  >
+                    {cat ? (
+                      <span className="cat-chip">
+                        <span className="cat-dot" style={{ background: cat.color }} />
+                        {cat.emoji ? `${cat.emoji} ` : ""}
+                        {cat.name}
+                      </span>
+                    ) : (
+                      <span className="muted small">—</span>
+                    )}
+                  </button>
+                )}
+                {pickerKey === v.key && (
+                  <InlinePicker
+                    title={`"${v.name}" always goes to…`}
+                    categories={categories}
+                    includeUncategorized={v.rule_id != null}
+                    noneLabel="✕ No automatic category"
+                    onPick={(id) => setVendorCategory(v, id)}
+                    onClose={() => setPickerKey(null)}
+                  />
+                )}
               </td>
             </tr>
-          ) : (
-            shown.map((v) => {
-              const cat =
-                v.rule_category_id != null
-                  ? categoriesById.get(v.rule_category_id)
-                  : undefined;
-              return (
-                <tr key={v.key}>
-                  <td>{maskText(v.name)}</td>
-                  <td className="num nowrap">
-                    <Link
-                      to={`/?q=${encodeURIComponent(v.name)}`}
-                      className="muted"
-                      title="Show these transactions"
-                    >
-                      {v.count}
-                    </Link>
-                  </td>
-                  <td className={`num nowrap ${v.total < 0 ? "neg" : "pos"}`}>
-                    <Money amount={v.total} currency={currency} />
-                  </td>
-                  <td className={`num nowrap ${v.avg_month < 0 ? "neg" : "pos"}`}>
-                    <Money amount={v.avg_month} currency={currency} />
-                  </td>
-                  <td className="nowrap cat-cell">
-                    {v.source === "none" ? (
-                      <span className="muted small">—</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="cat-chip-btn"
-                        title={
-                          v.rule_id != null
-                            ? "This vendor has its own rule — click to change or remove it"
-                            : "Set an automatic category for this vendor"
-                        }
-                        onClick={() => setPickerKey(pickerKey === v.key ? null : v.key)}
-                      >
-                        {cat ? (
-                          <span className="cat-chip">
-                            <span className="cat-dot" style={{ background: cat.color }} />
-                            {cat.emoji ? `${cat.emoji} ` : ""}
-                            {cat.name}
-                          </span>
-                        ) : (
-                          <span className="muted small">—</span>
-                        )}
-                      </button>
-                    )}
-                    {pickerKey === v.key && (
-                      <InlinePicker
-                        title={`"${v.name}" always goes to…`}
-                        categories={categories}
-                        includeUncategorized={v.rule_id != null}
-                        noneLabel="✕ No automatic category"
-                        onPick={(id) => setVendorCategory(v, id)}
-                        onClose={() => setPickerKey(null)}
-                      />
-                    )}
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+          );
+        }}
+      />
     </div>
   );
 }

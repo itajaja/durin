@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, formatDate } from "../api";
+import { api, formatDate, isoDate, isoDateFromTs } from "../api";
+import CopyableTable from "../components/CopyableTable";
 import { useMoney } from "../components/Money";
 import DatePresets from "../components/DatePresets";
 import useUrlFilterSync from "../components/useUrlFilterSync";
+import { csvAmount } from "../csv";
 import { AssetAccount, AssetsResponse, REFRESHED_EVENT } from "../types";
 
 const CHART_W = 900;
 const CHART_H = 340;
 const MARGIN = { top: 14, right: 10, bottom: 30, left: 62 };
 
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
+/** One row of the Current-balances table: an account, or an institution
+ * rollup when "Group by institution" is on. */
+interface BalanceRow {
+  key: string;
+  name: string;
+  /** The muted detail text: institution, or "N accounts" for rollups. */
+  sub: string;
+  /** Exact string for single accounts, summed number for rollups. */
+  balance: string | number;
+  currency: string;
+  asOf: number | null;
 }
 
 function defaultRange(): { start: string; end: string } {
@@ -73,7 +82,7 @@ function dayLabel(day: string, withYear: boolean): string {
 }
 
 export default function AssetsPage() {
-  const { fmt, fmtCompact } = useMoney();
+  const { fmt, fmtCompact, plain } = useMoney();
   const [searchParams] = useSearchParams();
   const urlInit = useRef({
     from: searchParams.get("from"),
@@ -324,6 +333,47 @@ export default function AssetsPage() {
       : null;
 
   const hovered = hoverIdx !== null && hoverIdx < n ? hoverIdx : null;
+
+  // The Current-balances rows exactly as displayed (sorting and the
+  // institution rollup applied); shared by the render and the CSV copy.
+  const balanceRows: BalanceRow[] = (() => {
+    const bal = (a: AssetAccount) => Number(a.balance) || 0;
+    const sorted = balSort
+      ? [...shown].sort((a, b) => (balSort === "asc" ? bal(a) - bal(b) : bal(b) - bal(a)))
+      : shown;
+    if (!groupByInst) {
+      return sorted.map((a) => ({
+        key: String(a.id),
+        name: a.name,
+        sub: a.org_name,
+        balance: a.balance,
+        currency: a.currency,
+        asOf: a.balance_date,
+      }));
+    }
+    const instGroups = new Map<string, AssetAccount[]>();
+    for (const a of sorted) {
+      const key = a.org_name || "Other";
+      instGroups.set(key, [...(instGroups.get(key) ?? []), a]);
+    }
+    let entries = [...instGroups.entries()];
+    if (balSort) {
+      const sub = (accts: AssetAccount[]) => accts.reduce((s, a) => s + bal(a), 0);
+      entries = entries.sort((x, y) =>
+        balSort === "asc" ? sub(x[1]) - sub(y[1]) : sub(y[1]) - sub(x[1])
+      );
+    }
+    // Grouped view rolls each institution up to its sum alone.
+    return entries.map(([inst, accts]) => ({
+      key: `inst:${inst}`,
+      name: inst,
+      sub: `${accts.length} account${accts.length === 1 ? "" : "s"}`,
+      balance: accts.reduce((s, a) => s + bal(a), 0),
+      currency: accts[0].currency,
+      asOf: null,
+    }));
+  })();
+  const balanceTotal = shown.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
 
   return (
     <div className="page">
@@ -581,8 +631,18 @@ export default function AssetsPage() {
               <span>Group by institution</span>
             </label>
           </div>
-          <table className="hover-rows">
-            <thead>
+          <CopyableTable
+            className="hover-rows"
+            csvHeader={["Account", "Details", "Balance", "Currency", "As of"]}
+            toCsv={(r) => [
+              r.name,
+              r.sub,
+              plain(csvAmount(r.balance)),
+              r.currency,
+              isoDateFromTs(r.asOf),
+            ]}
+            data={balanceRows}
+            header={
               <tr>
                 <th>Account</th>
                 <th
@@ -593,72 +653,36 @@ export default function AssetsPage() {
                 </th>
                 <th>As of</th>
               </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const bal = (a: AssetAccount) => Number(a.balance) || 0;
-                const sorted = balSort
-                  ? [...shown].sort((a, b) =>
-                      balSort === "asc" ? bal(a) - bal(b) : bal(b) - bal(a)
-                    )
-                  : shown;
-                if (!groupByInst)
-                  return sorted.map((a) => (
-                    <tr key={a.id}>
-                      <td>
-                        {a.name}
-                        {a.org_name ? <span className="muted"> · {a.org_name}</span> : null}
-                      </td>
-                      <td className={`num nowrap bal-cell ${bal(a) < 0 ? "neg" : "pos"}`}>
-                        {fmt(a.balance, a.currency)}
-                      </td>
-                      <td className="muted nowrap">{formatDate(a.balance_date)}</td>
-                    </tr>
-                  ));
-                const instGroups = new Map<string, AssetAccount[]>();
-                for (const a of sorted) {
-                  const key = a.org_name || "Other";
-                  instGroups.set(key, [...(instGroups.get(key) ?? []), a]);
-                }
-                let entries = [...instGroups.entries()];
-                if (balSort) {
-                  const sub = (accts: AssetAccount[]) =>
-                    accts.reduce((s, a) => s + bal(a), 0);
-                  entries = entries.sort((x, y) =>
-                    balSort === "asc" ? sub(x[1]) - sub(y[1]) : sub(y[1]) - sub(x[1])
-                  );
-                }
-                // Grouped view rolls each institution up to its sum alone.
-                return entries.map(([inst, accts]) => {
-                  const subtotal = accts.reduce((s, a) => s + bal(a), 0);
-                  return (
-                    <tr key={`inst:${inst}`}>
-                      <td>
-                        {inst}
-                        <span className="muted small"> · {accts.length} account{accts.length === 1 ? "" : "s"}</span>
-                      </td>
-                      <td className={`num nowrap bal-cell ${subtotal < 0 ? "neg" : "pos"}`}>
-                        {fmt(subtotal, accts[0].currency)}
-                      </td>
-                      <td />
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-            <tfoot>
+            }
+            renderRow={(r) => (
+              <tr key={r.key}>
+                <td>
+                  {r.name}
+                  {r.sub ? (
+                    <span className={`muted${r.asOf == null ? " small" : ""}`}>
+                      {" "}
+                      · {r.sub}
+                    </span>
+                  ) : null}
+                </td>
+                <td
+                  className={`num nowrap bal-cell ${
+                    (Number(r.balance) || 0) < 0 ? "neg" : "pos"
+                  }`}
+                >
+                  {fmt(r.balance, r.currency)}
+                </td>
+                <td className="muted nowrap">{r.asOf != null ? formatDate(r.asOf) : ""}</td>
+              </tr>
+            )}
+            tfoot={
               <tr className="total-row">
                 <td>Total</td>
-                <td className="num nowrap">
-                  {fmt(
-                    shown.reduce((sum, a) => sum + (Number(a.balance) || 0), 0),
-                    currency
-                  )}
-                </td>
+                <td className="num nowrap">{fmt(balanceTotal, currency)}</td>
                 <td />
               </tr>
-            </tfoot>
-          </table>
+            }
+          />
         </div>
       )}
     </div>

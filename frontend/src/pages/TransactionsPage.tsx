@@ -1,7 +1,8 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, formatDate } from "../api";
+import { api, formatDate, isoDateFromTs } from "../api";
 import { catOptions, InlinePicker } from "../components/CategoryPicker";
+import CopyableTable from "../components/CopyableTable";
 import DatePresets from "../components/DatePresets";
 import Select, { filterOptions, OptionList, usePopover } from "../components/Dropdown";
 import Money, { useMoney } from "../components/Money";
@@ -89,7 +90,7 @@ export default function TransactionsPage() {
   const [picker, setPicker] = useState<
     { kind: "chip" | "payee"; txnId: number; payee?: string } | null
   >(null);
-  const { maskText } = useMoney();
+  const { maskText, plain } = useMoney();
 
   const alive = useRef(true);
   const fetchSeq = useRef(0);
@@ -654,8 +655,34 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      <table className="txn-table">
-        <thead>
+      <CopyableTable
+        className="txn-table"
+        csvHeader={[
+          "Date",
+          "Account",
+          "Institution",
+          "Description",
+          "Payee",
+          "Memo",
+          "Category",
+          "Amount",
+          "Currency",
+          "Pending",
+        ]}
+        toCsv={(t) => [
+          isoDateFromTs(t.posted),
+          t.account_name,
+          t.org_name,
+          maskText(t.description),
+          maskText(t.payee),
+          maskText(t.memo),
+          (t.category_id != null && categoriesById.get(t.category_id)?.name) || "",
+          plain(t.amount_str),
+          t.currency,
+          t.pending ? "yes" : "",
+        ]}
+        data={items}
+        header={
           <tr>
             <th className="check-col">
               <input
@@ -676,168 +703,163 @@ export default function TransactionsPage() {
             </th>
             <th className="edit-col"></th>
           </tr>
-        </thead>
-        <tbody>
-          {loading && items.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="empty">
-                Loading…
-              </td>
-            </tr>
-          ) : items.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="empty">
-                {hasFilters
+        }
+        emptyRow={
+          <tr>
+            <td colSpan={7} className="empty">
+              {loading
+                ? "Loading…"
+                : hasFilters
                   ? "No transactions match these filters."
                   : "No transactions yet. Add a SimpleFin connection in Settings, then refresh."}
-              </td>
-            </tr>
-          ) : (
-            items.map((t: Txn) =>
-              editingId === t.id ? (
-                <EditRow
-                  key={t.id}
-                  txn={t}
-                  categories={categories}
-                  onCancel={() => setEditingId(null)}
-                  onSaved={(updated) => {
-                    setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
-                    setEditingId(null);
-                    loadMeta();
-                  }}
-                  onDeleted={() => {
-                    removeRows(new Set([t.id]));
-                    setEditingId(null);
-                    setNotice("Transaction deleted.");
-                    loadMeta();
-                  }}
-                />
-              ) : (
-                <tr
-                  key={t.id}
-                  className={`${t.pending ? "pending-row " : ""}${
-                    selected.has(t.id) ? "row-selected" : ""
-                  }`}
-                  onClick={(e) => {
-                    // Clicking the row toggles selection — but not when the
-                    // click was on a control, a popover, or selected text.
-                    if ((e.target as HTMLElement).closest("button, input, a, .inline-pop")) {
-                      return;
-                    }
-                    if (window.getSelection()?.toString()) return;
-                    toggleSelected(t.id);
-                  }}
-                >
-                  <td className="check-col">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(t.id)}
-                      onChange={() => toggleSelected(t.id)}
-                    />
-                  </td>
-                  <td className="nowrap">{formatDate(t.posted)}</td>
-                  <td className="nowrap">
-                    <span className="acct-name">{t.account_name}</span>
-                    {t.org_name && !aliasedAccountIds.has(t.account_id) && (
-                      <span className="muted small"> · {t.org_name}</span>
-                    )}
-                  </td>
-                  <td>
-                    {maskText(t.description || t.payee || "(no description)")}
-                    {t.pending && <span className="badge">pending</span>}
-                    {(t.payee || t.memo) && (
-                      <div className="muted small">
-                        {t.payee && (
-                          <span className="payee-wrap">
-                            {maskText(t.payee)}
-                            <button
-                              type="button"
-                              className="payee-tag-btn"
-                              title={`Always categorize payee "${t.payee}"…`}
-                              onClick={() =>
-                                setPicker({ kind: "payee", txnId: t.id, payee: t.payee })
-                              }
-                            >
-                              ⌖
-                            </button>
-                            {picker?.kind === "payee" && picker.txnId === t.id && (
-                              <InlinePicker
-                                title={`Payee "${t.payee}" always goes to…`}
-                                categories={categories}
-                                includeUncategorized={false}
-                                onPick={(id) => {
-                                  const cat = categories.find((c) => c.id === id);
-                                  if (cat && picker.payee) addPayeeRule(picker.payee, cat);
-                                }}
-                                onClose={() => setPicker(null)}
-                              />
-                            )}
-                          </span>
-                        )}
-                        {t.payee && t.memo ? " · " : ""}
-                        {maskText(t.memo)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="nowrap cat-cell">
-                    {(() => {
-                      const cat =
-                        t.category_id != null ? categoriesById.get(t.category_id) : undefined;
-                      return (
-                        <button
-                          type="button"
-                          className="cat-chip-btn"
-                          title="Change this transaction's category"
-                          onClick={() => setPicker({ kind: "chip", txnId: t.id })}
-                        >
-                          {cat ? (
-                            <span className="cat-chip">
-                              <span className="cat-dot" style={{ background: cat.color }} />
-                              {cat.emoji ? `${cat.emoji} ` : ""}
-                              {cat.name}
-                              {t.category_manual && <span className="manual-mark">✎</span>}
-                            </span>
-                          ) : (
-                            <span className="muted small">—</span>
-                          )}
-                        </button>
-                      );
-                    })()}
-                    {picker?.kind === "chip" && picker.txnId === t.id && (
-                      <InlinePicker
-                        title="Category for this transaction"
-                        categories={categories}
-                        includeUncategorized
-                        onPick={(id) => setRowCategory(t.id, id)}
-                        onClose={() => setPicker(null)}
-                      />
-                    )}
-                  </td>
-                  <td className={`num nowrap ${t.amount < 0 ? "neg" : "pos"}`}>
-                    <Money amount={t.amount_str} currency={t.currency} />
-                  </td>
-                  <td className="edit-col">
-                    <button
-                      className="btn btn-quiet btn-small"
-                      onClick={() => setEditingId(t.id)}
-                      title="Edit"
-                    >
-                      ✎
-                    </button>
-                  </td>
-                </tr>
-              )
-            )
-          )}
-          {hasMore && (
+            </td>
+          </tr>
+        }
+        after={
+          hasMore && (
             <tr ref={sentinelRef}>
               <td colSpan={7} className="empty small">
                 {loadingMore ? "Loading more…" : "Scroll for more"}
               </td>
             </tr>
-          )}
-        </tbody>
-      </table>
+          )
+        }
+        renderRow={(t) =>
+          editingId === t.id ? (
+            <EditRow
+              key={t.id}
+              txn={t}
+              categories={categories}
+              onCancel={() => setEditingId(null)}
+              onSaved={(updated) => {
+                setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                setEditingId(null);
+                loadMeta();
+              }}
+              onDeleted={() => {
+                removeRows(new Set([t.id]));
+                setEditingId(null);
+                setNotice("Transaction deleted.");
+                loadMeta();
+              }}
+            />
+          ) : (
+            <tr
+              key={t.id}
+              className={`${t.pending ? "pending-row " : ""}${
+                selected.has(t.id) ? "row-selected" : ""
+              }`}
+              onClick={(e) => {
+                // Clicking the row toggles selection — but not when the
+                // click was on a control, a popover, or selected text.
+                if ((e.target as HTMLElement).closest("button, input, a, .inline-pop")) {
+                  return;
+                }
+                if (window.getSelection()?.toString()) return;
+                toggleSelected(t.id);
+              }}
+            >
+              <td className="check-col">
+                <input
+                  type="checkbox"
+                  checked={selected.has(t.id)}
+                  onChange={() => toggleSelected(t.id)}
+                />
+              </td>
+              <td className="nowrap">{formatDate(t.posted)}</td>
+              <td className="nowrap">
+                <span className="acct-name">{t.account_name}</span>
+                {t.org_name && !aliasedAccountIds.has(t.account_id) && (
+                  <span className="muted small"> · {t.org_name}</span>
+                )}
+              </td>
+              <td>
+                {maskText(t.description || t.payee || "(no description)")}
+                {t.pending && <span className="badge">pending</span>}
+                {(t.payee || t.memo) && (
+                  <div className="muted small">
+                    {t.payee && (
+                      <span className="payee-wrap">
+                        {maskText(t.payee)}
+                        <button
+                          type="button"
+                          className="payee-tag-btn"
+                          title={`Always categorize payee "${t.payee}"…`}
+                          onClick={() =>
+                            setPicker({ kind: "payee", txnId: t.id, payee: t.payee })
+                          }
+                        >
+                          ⌖
+                        </button>
+                        {picker?.kind === "payee" && picker.txnId === t.id && (
+                          <InlinePicker
+                            title={`Payee "${t.payee}" always goes to…`}
+                            categories={categories}
+                            includeUncategorized={false}
+                            onPick={(id) => {
+                              const cat = categories.find((c) => c.id === id);
+                              if (cat && picker.payee) addPayeeRule(picker.payee, cat);
+                            }}
+                            onClose={() => setPicker(null)}
+                          />
+                        )}
+                      </span>
+                    )}
+                    {t.payee && t.memo ? " · " : ""}
+                    {maskText(t.memo)}
+                  </div>
+                )}
+              </td>
+              <td className="nowrap cat-cell">
+                {(() => {
+                  const cat =
+                    t.category_id != null ? categoriesById.get(t.category_id) : undefined;
+                  return (
+                    <button
+                      type="button"
+                      className="cat-chip-btn"
+                      title="Change this transaction's category"
+                      onClick={() => setPicker({ kind: "chip", txnId: t.id })}
+                    >
+                      {cat ? (
+                        <span className="cat-chip">
+                          <span className="cat-dot" style={{ background: cat.color }} />
+                          {cat.emoji ? `${cat.emoji} ` : ""}
+                          {cat.name}
+                          {t.category_manual && <span className="manual-mark">✎</span>}
+                        </span>
+                      ) : (
+                        <span className="muted small">—</span>
+                      )}
+                    </button>
+                  );
+                })()}
+                {picker?.kind === "chip" && picker.txnId === t.id && (
+                  <InlinePicker
+                    title="Category for this transaction"
+                    categories={categories}
+                    includeUncategorized
+                    onPick={(id) => setRowCategory(t.id, id)}
+                    onClose={() => setPicker(null)}
+                  />
+                )}
+              </td>
+              <td className={`num nowrap ${t.amount < 0 ? "neg" : "pos"}`}>
+                <Money amount={t.amount_str} currency={t.currency} />
+              </td>
+              <td className="edit-col">
+                <button
+                  className="btn btn-quiet btn-small"
+                  onClick={() => setEditingId(t.id)}
+                  title="Edit"
+                >
+                  ✎
+                </button>
+              </td>
+            </tr>
+          )
+        }
+      />
     </div>
   );
 }

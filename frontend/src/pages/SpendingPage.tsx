@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { api, isoDate } from "../api";
+import CopyableTable from "../components/CopyableTable";
 import { useMoney } from "../components/Money";
 import DatePresets from "../components/DatePresets";
 import Select from "../components/Dropdown";
 import useUrlFilterSync from "../components/useUrlFilterSync";
+import { csvAmount } from "../csv";
 import {
   Account,
   CategoriesResponse,
@@ -19,12 +21,6 @@ type Granularity = "day" | "week" | "month" | "year";
 const CHART_W = 900;
 const CHART_H = 340;
 const MARGIN = { top: 14, right: 10, bottom: 30, left: 62 };
-
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
 
 function defaultRange(): { start: string; end: string } {
   const now = new Date();
@@ -63,7 +59,7 @@ interface PickerEntry {
 }
 
 export default function SpendingPage() {
-  const { fmt, fmtCompact } = useMoney();
+  const { fmt, fmtCompact, plain } = useMoney();
   const [searchParams] = useSearchParams();
   const urlInit = useRef({
     from: searchParams.get("from"),
@@ -286,6 +282,9 @@ export default function SpendingPage() {
   const hasAnySpending = bucketTotals.some((t) => t > 0);
 
   const hovered = hoverIdx !== null && data ? hoverIdx : null;
+
+  // The Totals table rows, largest spend first.
+  const sortedSeries = data ? [...data.series].sort((a, b) => b.total - a.total) : [];
 
   return (
     <div className="page">
@@ -538,38 +537,45 @@ export default function SpendingPage() {
 
           <div className="card">
             <h3>Totals for this range</h3>
-            <table className="hover-rows">
-              <thead>
+            <CopyableTable
+              className="hover-rows"
+              csvHeader={["Category", "Spent", "Avg / month", "Share"]}
+              toCsv={(s) => [
+                `${s.emoji ? `${s.emoji} ` : ""}${s.name}`,
+                plain(csvAmount(s.total)),
+                plain(csvAmount(s.avg_month)),
+                data.grand_total > 0
+                  ? `${((s.total / data.grand_total) * 100).toFixed(1)}%`
+                  : "",
+              ]}
+              data={sortedSeries}
+              header={
                 <tr>
                   <th>Category</th>
                   <th className="num">Spent</th>
                   <th className="num">Avg / month</th>
                   <th className="num">Share</th>
                 </tr>
-              </thead>
-              <tbody>
-                {[...data.series]
-                  .sort((a, b) => b.total - a.total)
-                  .map((s) => (
-                    <tr key={s.key}>
-                      <td>
-                        <span className="cat-chip">
-                          <span className="cat-dot" style={{ background: s.color }} />
-                          {s.emoji ? `${s.emoji} ` : ""}
-                          {s.name}
-                        </span>
-                      </td>
-                      <td className="num nowrap">{fmt(s.total, currency)}</td>
-                      <td className="num nowrap">{fmt(s.avg_month, currency)}</td>
-                      <td className="num nowrap muted">
-                        {data.grand_total > 0
-                          ? `${((s.total / data.grand_total) * 100).toFixed(1)}%`
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+              }
+              renderRow={(s) => (
+                <tr key={s.key}>
+                  <td>
+                    <span className="cat-chip">
+                      <span className="cat-dot" style={{ background: s.color }} />
+                      {s.emoji ? `${s.emoji} ` : ""}
+                      {s.name}
+                    </span>
+                  </td>
+                  <td className="num nowrap">{fmt(s.total, currency)}</td>
+                  <td className="num nowrap">{fmt(s.avg_month, currency)}</td>
+                  <td className="num nowrap muted">
+                    {data.grand_total > 0
+                      ? `${((s.total / data.grand_total) * 100).toFixed(1)}%`
+                      : "—"}
+                  </td>
+                </tr>
+              )}
+            />
           </div>
         </>
       ) : (
